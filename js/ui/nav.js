@@ -13,7 +13,7 @@ export const SECTIONS = [
   { id: 'reading', label: 'Чтение', group: 'mine', soon: true },
   { id: 'blog', label: 'Блог', group: 'mine', soon: true },
   { id: 'review', label: 'Обзор недели', group: 'sum', soon: true },
-  { id: 'settings', label: 'Настройки и бэкап', group: 'sum' }
+  { id: 'settings', label: 'Настройки', group: 'sum' }
 ];
 
 // Морская декорация меню: лучи, пузырьки, рыбки. Рендерится один раз.
@@ -36,7 +36,7 @@ const SEA = `
   <span class="bub bubtall" style="width:4px;height:4px;left:90%;bottom:-10px;animation-delay:11s"></span>
 </div>`;
 
-export function sidebar({ section, name, badges, backupText, backupWarn }) {
+export function sidebar({ section, name, badges, backupTitle, backupText, backupWarn }) {
   const btn = (s) => `<a class="nav-btn${s.id === section ? ' active' : ''}${s.soon ? ' soon' : ''}" href="#${s.id}" data-key="nav-${s.id}"${s.id === section ? ' aria-current="page"' : ''}>${icon(s.id === 'settings' ? 'settings' : s.id)}<span>${esc(s.label)}</span>${badges[s.id] ? `<span class="badge">${badges[s.id]}</span>` : ''}</a>`;
   const group = (g) => SECTIONS.filter((s) => s.group === g).map(btn).join('');
   return `
@@ -52,7 +52,7 @@ export function sidebar({ section, name, badges, backupText, backupWarn }) {
     ${group('mine')}
     <div class="nav-sec">Итоги</div>
     ${group('sum')}
-    <a class="backup" href="#settings" style="color:inherit;text-decoration:none"><span class="dot${backupWarn ? ' warn' : ''}"></span><span><b style="font-weight:600">${backupWarn ? 'Нужен бэкап' : 'Бэкап сделан'}</b><br><span style="color:#A9CBE8">${esc(backupText)}</span></span></a>
+    <a class="backup" href="#settings" style="color:inherit;text-decoration:none"><span class="dot${backupWarn ? ' warn' : ''}"></span><span><b style="font-weight:600">${esc(backupTitle)}</b><br><span style="color:#A9CBE8">${esc(backupText)}</span></span></a>
   </div>
 </nav>`;
 }

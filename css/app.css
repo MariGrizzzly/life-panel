@@ -214,3 +214,27 @@ a { color: var(--accent); }
   .header-tools { display: none !important; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ===== Вход ===== */
+.auth-screen { position: relative; min-height: 100vh; min-height: 100dvh; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 32px 16px;
+  background: linear-gradient(180deg, #1C76B8 0%, #0F4C80 30%, #0A3358 62%, #04182B 100%); color: #FFFFFF; }
+.auth-card { position: relative; width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center;
+  padding: 32px 26px; border-radius: 26px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 24px 60px rgba(2,16,30,.4), inset 0 1px 0 rgba(255,255,255,.18); }
+.auth-sub { margin: 0; font-size: 15px; line-height: 1.5; color: #D6EBFA; }
+.auth-form { width: 100%; display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.auth-form .label { color: #CFE6F8; }
+.auth-form .input { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.3); color: #FFFFFF; font-size: 16px; }
+.auth-form .input:focus { border-color: #9FD8FF; }
+.auth-form .btn { width: 100%; margin-top: 4px; }
+.auth-form .btn[disabled] { opacity: .7; cursor: default; }
+.auth-seg { background: rgba(255,255,255,.12); width: 100%; }
+.auth-seg button { flex: 1; color: #D6EBFA; min-height: 40px; }
+.auth-seg button.on { background: #FFFFFF; color: var(--deep); }
+.auth-link { color: #CFE6F8; text-decoration: underline; }
+.auth-msg { width: 100%; font-size: 14px; line-height: 1.5; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.12); text-align: left; }
+.auth-msg.err { background: rgba(255,120,100,.2); color: #FFE1DB; }
+.auth-msg.ok { background: rgba(95,211,154,.2); color: #DDF7EA; }
+.auth-choice { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.auth-choice label { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.4; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.08); cursor: pointer; }
+.auth-choice input { margin-top: 3px; accent-color: #6BC0F5; }
