@@ -1,6 +1,7 @@
 import { esc, todayISO, plural, longDate } from '../util.js';
 import { greetingLine } from '../texts.js';
 import { icon, water, WAVE_PATH, WAVE_PATH_SOFT } from '../ui/icons.js';
+import { chevron } from '../ui/fields.js';
 import { projectOf, SPHERES, EVENT_CATS, habitStreak, NO_PROJECT, diaryStreak } from '../store.js';
 import { taskRow } from './shared.js';
 
@@ -45,7 +46,10 @@ export function render(s, ui) {
 
   const sphereSeg = [['all', 'Все'], ['personal', 'Личное'], ['work', 'Работа']].map(([id, label]) =>
     `<button class="${ui.todayPr === 'all' && ui.todaySphere === id ? 'on' : ''}" data-action="today-sphere" data-id="${id}">${label}</button>`).join('');
-  const prOptions = (sphere) => s.projects.filter((p) => p.sphere === sphere && !p.archived).map((p) => `<option value="${esc(p.id)}"${ui.todayPr === p.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+  const prOpt = (id, name, color) => `<button class="opt${ui.todayPr === id ? ' on' : ''}" role="option" aria-selected="${ui.todayPr === id}" data-action="pr-pick" data-id="${esc(id)}">${color ? `<span class="pdot" style="background:${esc(color)};width:9px;height:9px"></span>` : ''}<span style="flex:1">${esc(name)}</span>${ui.todayPr === id ? '<span aria-hidden="true">✓</span>' : ''}</button>`;
+  const curP = s.projects.find((p) => p.id === ui.todayPr);
+  const prSec = (sphere, label) => { const ps = s.projects.filter((p) => p.sphere === sphere && !p.archived); return ps.length ? `<div class="menu-sec">${label}</div>${ps.map((p) => prOpt(p.id, p.name, p.color)).join('')}` : ''; };
+  const prCurrent = ui.todayPr === 'all' ? '<span>Все проекты</span>' : ui.todayPr === 'none' ? '<span class="pdot" style="background:#9AAAB5;width:9px;height:9px"></span><span>Без проекта</span>' : curP ? `<span class="pdot" style="background:${esc(curP.color)};width:9px;height:9px"></span><span>${esc(curP.name)}</span>` : '<span>Все проекты</span>';
 
   const habitsHtml = s.habits.map((h) => {
     const on = !!(s.habitLog[today] && s.habitLog[today][h.id]);
@@ -81,7 +85,7 @@ export function render(s, ui) {
         </div>
         <form class="quick" data-action="quick-inbox">
           <label for="qc" class="sr">Улов: мысль, идея или ссылка на потом</label>
-          <input id="qc" name="text" class="input" placeholder="Поймала мысль? Закинь в улов и нажми Enter" autocomplete="off" enterkeyhint="send">
+          <input id="qc" name="text" class="input" placeholder="Поймала мысль? Закидываю в улов" autocomplete="off" enterkeyhint="send">
         </form>
       </div>
       <div class="orbwrap" style="flex:none;display:flex;align-items:center;gap:18px">
@@ -108,12 +112,14 @@ export function render(s, ui) {
         <h2 class="h2" style="font-size:18px">Задачи на сегодня</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <div class="seg" role="group" aria-label="Сфера">${sphereSeg}</div>
-          <label for="tpf" class="sr">Показать проект</label>
-          <select id="tpf" class="select" style="width:auto;min-height:42px" data-change="today-project" data-value="${esc(ui.todayPr)}">
-            <option value="all"${ui.todayPr === 'all' ? ' selected' : ''}>Все проекты</option>
-            <optgroup label="Работа">${prOptions('work')}</optgroup>
-            <optgroup label="Личное">${prOptions('personal')}<option value="none"${ui.todayPr === 'none' ? ' selected' : ''}>Без проекта</option></optgroup>
-          </select>
+          <div style="position:relative">
+            <button class="selbtn" data-action="pr-menu" aria-haspopup="listbox" aria-expanded="${!!ui.prMenu}">${prCurrent}${chevron}</button>
+            ${ui.prMenu ? `<div class="menu fade" role="listbox" style="top:48px;right:0;min-width:240px;max-height:360px;overflow:auto">
+              ${prOpt('all', 'Все проекты', '')}${prOpt('none', 'Без проекта', '#9AAAB5')}
+              ${prSec('work', 'Работа')}
+              ${prSec('personal', 'Личное')}
+            </div>` : ''}
+          </div>
         </div>
       </div>
       ${groups.length ? `<div class="grid-cards">${groups.map(({ p, items }) => {

@@ -35,7 +35,7 @@ a { color: var(--accent); }
   background: linear-gradient(180deg, #1B6FAE 0%, #0F4C80 18%, #0A3358 45%, #06223B 75%, #020F1C 100%);
   padding: 20px 14px; display: flex; flex-direction: column; gap: 2px; }
 .sea { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.side-inner { position: relative; display: flex; flex-direction: column; gap: 2px; height: 100%; overflow-y: auto; scrollbar-width: none; }
+.side-inner { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 2px; height: 100%; overflow-y: auto; scrollbar-width: none; }
 .side-inner::-webkit-scrollbar { display: none; }
 .brand { display: flex; align-items: center; gap: 12px; padding: 4px 12px 18px; }
 .brand-orb { width: 40px; height: 40px; border-radius: 50%; position: relative; overflow: hidden; background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.35); flex: none; }
@@ -131,15 +131,18 @@ a { color: var(--accent); }
 .fade { animation: fadeUp .4s cubic-bezier(.2,.8,.2,1) both; }
 
 /* Рыбки */
-@keyframes swimR { 0% { transform: translateX(-140px); } 45% { transform: translateX(300px); } 100% { transform: translateX(300px); } }
-@keyframes swimL { 0% { transform: translateX(300px); } 45% { transform: translateX(-140px); } 100% { transform: translateX(-140px); } }
-.swimR, .swimL { position: absolute; left: 0; display: block; animation-timing-function: linear; animation-iteration-count: infinite; }
-.swimR { animation-name: swimR; transform: translateX(-140px); }
-.swimL { animation-name: swimL; transform: translateX(300px); }
-@keyframes wiggle { 0% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-3px) rotate(2deg); } 100% { transform: translateY(0) rotate(-2deg); } }
-@keyframes wiggleL { 0% { transform: scaleX(-1) translateY(0) rotate(-2deg); } 50% { transform: scaleX(-1) translateY(-3px) rotate(2deg); } 100% { transform: scaleX(-1) translateY(0) rotate(-2deg); } }
-.wiggle { animation: wiggle 1.6s ease-in-out infinite; transform-origin: center; }
-.swimL .wiggle { animation-name: wiggleL; }
+.fish { position: absolute; left: 0; top: 0; will-change: transform; pointer-events: none; }
+.fish svg { display: block; overflow: visible; }
+.fbob { width: 100%; height: 100%; animation: fbob 3s ease-in-out infinite; }
+@keyframes fbob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+.fbob2 { animation: fbob 1.4s ease-in-out infinite; }
+.ftail { transform-box: fill-box; transform-origin: 100% 50%; animation: ftail var(--wag, .4s) ease-in-out infinite alternate; }
+.ftail.vert { animation-name: ftailv; }
+.ftail.flipper { transform-origin: 0% 0%; animation-name: flipper; }
+@keyframes ftail { from { transform: rotate(-11deg) scaleX(1); } to { transform: rotate(11deg) scaleX(.82); } }
+@keyframes ftailv { from { transform: rotate(-16deg); } to { transform: rotate(14deg); } }
+@keyframes flipper { from { transform: rotate(-14deg); } to { transform: rotate(18deg); } }
+@media (prefers-reduced-motion: reduce) { .fish { display: none; } }
 @keyframes jelly { 0% { transform: translateY(0); } 50% { transform: translateY(-60px); } 100% { transform: translateY(0); } }
 .jelly { position: absolute; animation: jelly 12s ease-in-out infinite; }
 
@@ -328,3 +331,21 @@ a { color: var(--accent); }
   .mood { width: 46px; height: 46px; }
   .mood span { font-size: 24px; }
 }
+
+/* ===== Свои выпадающие списки ===== */
+.pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; cursor: pointer; padding: 0 12px 0 14px; }
+.pick > span { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick .ph, .pick span.ph { color: #7C8D9B; }
+.pick .chev { flex: none; color: var(--muted); transition: transform .2s ease; }
+.pick[aria-expanded="true"] { border-color: #3A93D4; box-shadow: 0 0 0 3px rgba(58,147,212,.15); }
+.pick[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.listpop { left: 0; right: auto; min-width: 100%; width: max-content; max-width: 320px; max-height: 340px; overflow: auto; gap: 0; padding: 6px; }
+.datepop { width: 300px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; }
+.cal-head b { font-size: 15px; font-weight: 600; }
+.calgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.tslot.day { min-height: 34px; font-weight: 500; }
+.tslot.day.today:not(.on) { box-shadow: inset 0 0 0 1.5px #3A93D4; color: var(--deep); font-weight: 700; }
+.selbtn { display: inline-flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px 0 14px; border-radius: 12px; border: 1px solid #C9DCEB; background: linear-gradient(180deg, #FFFFFF, #F1F7FC); color: var(--ink); font-size: 14px; font-weight: 500; cursor: pointer; }
+.selbtn .chev { color: var(--muted); transition: transform .2s ease; }
+.selbtn[aria-expanded="true"] .chev { transform: rotate(180deg); }

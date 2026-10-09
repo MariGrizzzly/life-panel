@@ -8,6 +8,7 @@ import * as Auth from './pages/auth.js';
 import { esc, todayISO } from './util.js';
 import { sidebar, tabbar, SECTIONS } from './ui/nav.js';
 import { patch } from './ui/morph.js';
+import { startFish } from './ui/fish.js';
 import { taskModal, projectModal, eventModal, ask } from './ui/modals.js';
 import * as Today from './pages/today.js';
 import * as Tasks from './pages/tasks.js';
@@ -142,6 +143,8 @@ const actions = {
   'add-project': () => { ui.listMenu = false; projectModal((id) => { if (ui.section === 'tasks') { ui.taskSel = id; render(); } }); },
   'habit': (el) => toggleHabit(el.dataset.id),
   'sign-out': async () => { if (await ask('Выйти из аккаунта на этом устройстве?', { ok: 'Выйти' })) { await auth.signOut(); } },
+  'pr-menu': () => { ui.prMenu = !ui.prMenu; render(); },
+  'pr-pick': (el) => { ui.todayPr = el.dataset.id; ui.prMenu = false; render(); },
   'today-sphere': (el) => { ui.todaySphere = el.dataset.id; ui.todayPr = 'all'; render(); },
   'go': (el) => { if (el.dataset.view) { ui.taskView = el.dataset.view; ui.taskSel = 'today'; } location.hash = '#' + el.dataset.to; },
   'toggle-list-menu': () => { ui.listMenu = !ui.listMenu; render(); },
@@ -289,10 +292,10 @@ app.addEventListener('click', (e) => {
   if (tab) { e.preventDefault(); const em = document.getElementById('a-email'); if (em) ui.authEmail = em.value; ui.authTab = tab.dataset.authTab; setMsg(''); render(); return; }
   const el = e.target.closest('[data-action]');
   if (!el || el.tagName === 'FORM') {
-    if ((ui.listMenu || ui.qMenu) && !e.target.closest('.menu')) { ui.listMenu = false; ui.qMenu = false; render(); }
+    if ((ui.listMenu || ui.qMenu || ui.prMenu) && !e.target.closest('.menu')) { ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; render(); }
     return;
   }
-  if ((ui.listMenu || ui.qMenu) && !e.target.closest('.menu') && !['toggle-list-menu', 'diary-q-menu'].includes(el.dataset.action)) { ui.listMenu = false; ui.qMenu = false; }
+  if ((ui.listMenu || ui.qMenu || ui.prMenu) && !e.target.closest('.menu') && !['toggle-list-menu', 'diary-q-menu', 'pr-menu'].includes(el.dataset.action)) { ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; }
   const fn = actions[el.dataset.action];
   if (fn) { e.preventDefault(); fn(el, e); }
 });
@@ -325,11 +328,11 @@ app.addEventListener('change', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (ui.listMenu || ui.qMenu) { ui.listMenu = false; ui.qMenu = false; render(); }
+  if (ui.listMenu || ui.qMenu || ui.prMenu) { ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; render(); }
   else if (ui.quickAdd && e.target.closest && e.target.closest('.quick-add')) { ui.quickAdd = null; render(); }
 });
 
-window.addEventListener('hashchange', () => { flushDiary(); readHash(); ui.listMenu = false; ui.qMenu = false; ui.quickAdd = null; render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { flushDiary(); readHash(); ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; ui.quickAdd = null; render(); window.scrollTo(0, 0); });
 store.subscribe(() => { if (ui.screen === 'app') render(); });
 auth.onChange((sess) => {
   if (!sess && ui.screen !== 'login') { endSession(); ui.screen = 'login'; ui.authTab = 'login'; setMsg('Ты вышла из аккаунта'); render(); }
@@ -358,6 +361,7 @@ if (link.linkError) { ui.screen = 'login'; setMsg('Ссылка из письм�
 else if (link.linkType === 'recovery') { ui.screen = 'new-password'; render(); }
 else if (auth.session()) { enterApp(); }
 else { ui.screen = 'login'; render(); }
+startFish();
 
 // Работа без интернета (после первого открытия)
 if ('serviceWorker' in navigator && location.protocol === 'https:') {

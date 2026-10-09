@@ -1,5 +1,5 @@
-import { esc, todayISO, addDays } from '../util.js';
-import { tagInput, timeField, dateChips } from './fields.js';
+import { esc, todayISO } from '../util.js';
+import { tagInput, timeField, dateField, selectField } from './fields.js';
 import { icon } from './icons.js';
 import { store, addTask, updateTask, deleteTask, addProject, addEvent, PROJECT_COLORS, EVENT_CATS, removeInbox } from '../store.js';
 
@@ -52,12 +52,17 @@ function open(title, body, mount) {
   if (first) setTimeout(() => first.focus(), 30);
 }
 
-function projectOptions(selected) {
+function projectGroups(selected) {
   const s = store.get();
-  const opts = (sphere) => s.projects.filter((p) => p.sphere === sphere && (!p.archived || p.id === selected))
-    .map((p) => `<option value="${esc(p.id)}"${p.id === selected ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
-  return `<optgroup label="Работа">${opts('work')}</optgroup><optgroup label="Личное">${opts('personal')}<option value=""${!selected ? ' selected' : ''}>Без проекта</option></optgroup><option value="__new">+ Новый проект…</option>`;
+  const opts = (sphere) => s.projects.filter((p) => p.sphere === sphere && (!p.archived || p.id === selected)).map((p) => ({ value: p.id, label: p.name, color: p.color }));
+  return [
+    { options: [{ value: '', label: 'Без проекта', color: '#9AAAB5' }] },
+    { label: 'Работа', options: opts('work') },
+    { label: 'Личное', options: opts('personal') },
+    { options: [{ value: '__new', label: '+ Новый проект…', accent: true }] }
+  ].filter((g) => g.options.length);
 }
+const STATUS_GROUPS = [{ options: [{ value: 'todo', label: 'К работе', color: '#9AAAB5' }, { value: 'doing', label: 'В процессе', color: '#2E8FD6' }, { value: 'done', label: 'Готово', color: '#2E8A5C' }] }];
 
 // ===== Задача: создание и редактирование =====
 export function taskModal({ id = null, projectId, title = '', date, fromInbox = null } = {}) {
@@ -70,11 +75,11 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
     <label for="f-title" class="sr">Название задачи</label>
     <input id="f-title" name="title" class="input" style="font-size:16px;min-height:50px" placeholder="Что нужно сделать?" value="${esc(data.title)}" required autocomplete="off">
     <div class="form-grid">
-      <div class="field"><label class="label" for="f-project">Проект</label><select id="f-project" name="projectId" class="select">${projectOptions(data.projectId)}</select></div>
-      <div class="field"><label class="label" for="f-date">Когда</label><input id="f-date" name="date" type="date" class="input" value="${esc(data.date || '')}"><div class="chips" data-datechips></div></div>
+      <div class="field"><label class="label" for="f-project">Проект</label><div data-project></div></div>
+      <div class="field"><label class="label" for="f-date">Когда</label><div data-date></div></div>
       <div class="field"><label class="label" for="f-time">Время, если нужно</label><div data-time></div></div>
-      <div class="field"><label class="label" for="f-deadline">Срок</label><input id="f-deadline" name="deadline" type="date" class="input" value="${esc(data.deadline || '')}"></div>
-      ${t ? `<div class="field"><label class="label" for="f-status">Статус</label><select id="f-status" name="status" class="select"><option value="todo"${data.status === 'todo' ? ' selected' : ''}>К работе</option><option value="doing"${data.status === 'doing' ? ' selected' : ''}>В процессе</option><option value="done"${data.status === 'done' ? ' selected' : ''}>Готово</option></select></div>` : ''}
+      <div class="field"><label class="label" for="f-deadline">Срок</label><div data-deadline></div></div>
+      ${t ? '<div class="field"><label class="label" for="f-status">Статус</label><div data-status></div></div>' : ''}
     </div>
     <div data-newproj hidden style="border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--surface-2);display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
       <div class="field" style="flex:1 1 200px"><label class="label" for="np-name">Как назовём новый проект?</label><input id="np-name" class="input" placeholder="Например, «Сайт клиента»" autocomplete="off"></div>
@@ -93,17 +98,19 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
     const form = m.querySelector('[data-form]');
     const tagsF = tagInput(m.querySelector('[data-tags]'), { value: data.tags, all: () => store.get().tags });
     const timeF = timeField(m.querySelector('[data-time]'), { value: data.time, id: 'f-time', name: 'time' });
-    dateChips(m.querySelector('#f-date'), m.querySelector('[data-datechips]'), [
-      { label: 'Сегодня', value: today }, { label: 'Завтра', value: addDays(today, 1) }, { label: 'Без даты', value: '' }
-    ]);
-    cleanup = () => { tagsF.destroy(); timeF.destroy(); };
-    const projSel = m.querySelector('#f-project');
+    const dateF = dateField(m.querySelector('[data-date]'), { value: data.date || '', id: 'f-date', name: 'date' });
+    const dlF = dateField(m.querySelector('[data-deadline]'), { value: data.deadline || '', id: 'f-deadline', name: 'deadline', placeholder: 'без срока', clearLabel: 'Без срока' });
+    const projHost = m.querySelector('[data-project]');
+    let projF = null;
+    projF = selectField(projHost, { value: data.projectId || '', id: 'f-project', name: 'projectId', groups: () => projectGroups(projF ? projF.get() : data.projectId) });
+    const stHost = m.querySelector('[data-status]');
+    const stF = stHost ? selectField(stHost, { value: data.status, id: 'f-status', name: 'status', groups: () => STATUS_GROUPS }) : null;
+    cleanup = () => { [tagsF, timeF, dateF, dlF, projF, stF].forEach((f) => f && f.destroy()); };
     const np = m.querySelector('[data-newproj]');
-    let prevProject = projSel.value;
     let npSphere = 'work';
-    projSel.addEventListener('change', () => {
-      np.hidden = projSel.value !== '__new';
-      if (!np.hidden) m.querySelector('#np-name').focus(); else prevProject = projSel.value;
+    projHost.addEventListener('pick', (e) => {
+      np.hidden = e.detail !== '__new';
+      if (!np.hidden) m.querySelector('#np-name').focus();
     });
     np.querySelectorAll('[data-np-sphere]').forEach((b) => b.addEventListener('click', () => {
       npSphere = b.dataset.npSphere;
@@ -115,8 +122,7 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
       const used = store.get().projects.map((p) => p.color);
       const color = PROJECT_COLORS.find((c) => !used.includes(c)) || PROJECT_COLORS[0];
       const pid = addProject({ name, sphere: npSphere, color });
-      projSel.innerHTML = projectOptions(pid);
-      prevProject = pid;
+      projF.set(pid);
       np.hidden = true;
       return pid;
     };
@@ -127,10 +133,10 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
       const fd = new FormData(form);
       const titleV = String(fd.get('title') || '').trim();
       if (!titleV) return;
-      let pid = fd.get('projectId');
-      if (pid === '__new') pid = m.querySelector('#np-name').value.trim() ? createProject() : prevProject;
-      const payload = { title: titleV, projectId: pid || null, date: fd.get('date') || null, time: timeF.get(), deadline: fd.get('deadline') || '', tags: tagsF.get() };
-      if (t) updateTask(t.id, { ...payload, status: fd.get('status') || t.status });
+      let pid = projF.get();
+      if (!np.hidden && m.querySelector('#np-name').value.trim()) pid = createProject();
+      const payload = { title: titleV, projectId: pid || null, date: dateF.get() || null, time: timeF.get(), deadline: dlF.get() || '', tags: tagsF.get() };
+      if (t) updateTask(t.id, { ...payload, status: stF ? stF.get() : t.status });
       else { addTask(payload); if (fromInbox) removeInbox(fromInbox); }
       closeModal();
     });
@@ -173,20 +179,23 @@ export function eventModal() {
   const body = `<form data-form style="display:flex;flex-direction:column;gap:14px">
     <div class="field"><label class="label" for="e-title">Что</label><input id="e-title" name="title" class="input" required autocomplete="off"></div>
     <div class="form-grid">
-      <div class="field"><label class="label" for="e-date">Дата</label><input id="e-date" name="date" type="date" class="input" value="${todayISO()}" required></div>
+      <div class="field"><label class="label" for="e-date">Дата</label><div data-date></div></div>
       <div class="field"><label class="label" for="e-time">Время</label><div data-time></div></div>
-      <div class="field"><label class="label" for="e-cat">Категория</label><select id="e-cat" name="cat" class="select">${Object.entries(EVENT_CATS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select></div>
+      <div class="field"><label class="label" for="e-cat">Категория</label><div data-cat></div></div>
     </div>
     <div style="display:flex;gap:8px"><button class="btn" type="submit">Добавить событие</button><button class="btn ghost" type="button" data-close>Отмена</button></div>
   </form>`;
   open('Новое событие', body, (m) => {
     const timeF = timeField(m.querySelector('[data-time]'), { value: '', id: 'e-time', name: 'time' });
-    cleanup = () => timeF.destroy();
+    const dateF = dateField(m.querySelector('[data-date]'), { value: todayISO(), id: 'e-date', name: 'date', required: true });
+    const catColors = { work: '#5A60C4', personal: '#D9733A', sport: '#2F8F83', blog: '#7A5CB8' };
+    const catF = selectField(m.querySelector('[data-cat]'), { value: 'personal', id: 'e-cat', name: 'cat', groups: () => [{ options: Object.entries(EVENT_CATS).map(([k, v]) => ({ value: k, label: v.label, color: catColors[k] })) }] });
+    cleanup = () => { timeF.destroy(); dateF.destroy(); catF.destroy(); };
     m.querySelector('[data-form]').addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const title = String(fd.get('title') || '').trim(); if (!title) return;
-      addEvent({ title, date: fd.get('date'), time: timeF.get(), cat: fd.get('cat') });
+      addEvent({ title, date: dateF.get() || todayISO(), time: timeF.get(), cat: catF.get() });
       closeModal();
     });
   });
