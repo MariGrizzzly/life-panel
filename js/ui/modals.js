@@ -38,7 +38,8 @@ export function ask(message, { ok = 'Да', cancel = 'Отмена', danger = fa
   });
 }
 
-function open(title, body, mount) {
+export function setCleanup(fn) { cleanup = fn; }
+export function open(title, body, mount) {
   lastFocus = document.activeElement;
   root().innerHTML = `<div class="backdrop" data-backdrop><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle">
     <div class="modal-head"><h2 class="h2" id="mtitle" style="font-size:18px">${esc(title)}</h2><button class="link" data-close aria-label="Закрыть" style="display:flex;align-items:center">${icon('close', 18, 2)}</button></div>
@@ -77,7 +78,6 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
     <div class="form-grid">
       <div class="field"><label class="label" for="f-project">Проект</label><div data-project></div></div>
       <div class="field"><label class="label" for="f-date">Когда</label><div data-date></div></div>
-      <div class="field"><label class="label" for="f-time">Время, если нужно</label><div data-time></div></div>
       <div class="field"><label class="label" for="f-deadline">Срок</label><div data-deadline></div></div>
       ${t ? '<div class="field"><label class="label" for="f-status">Статус</label><div data-status></div></div>' : ''}
     </div>
@@ -97,7 +97,6 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
   open(t ? 'Задача' : 'Новая задача', body, (m) => {
     const form = m.querySelector('[data-form]');
     const tagsF = tagInput(m.querySelector('[data-tags]'), { value: data.tags, all: () => store.get().tags });
-    const timeF = timeField(m.querySelector('[data-time]'), { value: data.time, id: 'f-time', name: 'time' });
     const dateF = dateField(m.querySelector('[data-date]'), { value: data.date || '', id: 'f-date', name: 'date' });
     const dlF = dateField(m.querySelector('[data-deadline]'), { value: data.deadline || '', id: 'f-deadline', name: 'deadline', placeholder: 'без срока', clearLabel: 'Без срока' });
     const projHost = m.querySelector('[data-project]');
@@ -105,7 +104,7 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
     projF = selectField(projHost, { value: data.projectId || '', id: 'f-project', name: 'projectId', groups: () => projectGroups(projF ? projF.get() : data.projectId) });
     const stHost = m.querySelector('[data-status]');
     const stF = stHost ? selectField(stHost, { value: data.status, id: 'f-status', name: 'status', groups: () => STATUS_GROUPS }) : null;
-    cleanup = () => { [tagsF, timeF, dateF, dlF, projF, stF].forEach((f) => f && f.destroy()); };
+    cleanup = () => { [tagsF, dateF, dlF, projF, stF].forEach((f) => f && f.destroy()); };
     const np = m.querySelector('[data-newproj]');
     let npSphere = 'work';
     projHost.addEventListener('pick', (e) => {
@@ -135,7 +134,7 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
       if (!titleV) return;
       let pid = projF.get();
       if (!np.hidden && m.querySelector('#np-name').value.trim()) pid = createProject();
-      const payload = { title: titleV, projectId: pid || null, date: dateF.get() || null, time: timeF.get(), deadline: dlF.get() || '', tags: tagsF.get() };
+      const payload = { title: titleV, projectId: pid || null, date: dateF.get() || null, deadline: dlF.get() || '', tags: tagsF.get() };
       if (t) updateTask(t.id, { ...payload, status: stF ? stF.get() : t.status });
       else { addTask(payload); if (fromInbox) removeInbox(fromInbox); }
       closeModal();

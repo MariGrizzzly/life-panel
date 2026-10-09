@@ -25,12 +25,12 @@ export const EVENT_CATS = {
 export const PROJECT_COLORS = ['#5A60C4', '#2F8F83', '#B0802A', '#D9733A', '#C24D6B', '#7A5CB8', '#14629E', '#4B8B3B'];
 export const DEFAULT_TAGS = ['важно', 'созвон', 'ждёт ответа', 'рутина', 'быстро'];
 
-const emptyState = () => ({ version: 3, profile: { name: '', prefs: {} }, projects: [], tags: [], tasks: [], inbox: [], habits: [], habitLog: {}, events: [], diary: {}, hasDemo: false, lastBackup: null, updatedAt: null });
+const emptyState = () => ({ version: 3, profile: { name: '', prefs: {} }, projects: [], tags: [], tasks: [], inbox: [], habits: [], habitLog: {}, events: [], diary: {}, workouts: [], billiards: [], hasDemo: false, lastBackup: null, updatedAt: null });
 
 function normalize(s) {
   const e = emptyState();
   const out = { ...e, ...(s || {}) };
-  ['projects', 'tags', 'tasks', 'inbox', 'habits', 'events'].forEach((k) => { if (!Array.isArray(out[k])) out[k] = []; });
+  ['projects', 'tags', 'tasks', 'inbox', 'habits', 'events', 'workouts', 'billiards'].forEach((k) => { if (!Array.isArray(out[k])) out[k] = []; });
   if (!out.habitLog || typeof out.habitLog !== 'object') out.habitLog = {};
   if (!out.diary || typeof out.diary !== 'object' || Array.isArray(out.diary)) out.diary = {};
   if (!out.profile) out.profile = { name: '' };
@@ -77,6 +77,8 @@ const R = {
   tag: (name) => ({ user_id: userId, name }),
   habitDay: (habitId, day) => ({ user_id: userId, habit_id: habitId, day }),
   profile: (p) => ({ user_id: userId, name: p.name || '', prefs: p.prefs || {} }),
+  workout: (w) => ({ id: w.id, user_id: userId, day: w.day, duration: w.duration || null, coach: !!w.coach, exercises: w.exercises || [], note: w.note || '', updated_at: new Date().toISOString() }),
+  billiard: (b) => ({ id: b.id, user_id: userId, day: b.day, drills: b.drills || [], note: b.note || '', updated_at: new Date().toISOString() }),
   diary: (d) => ({ id: d.id, user_id: userId, day: d.day, text: d.text || '', mood: d.mood || null, sleep: d.sleep === '' || d.sleep === undefined ? null : d.sleep, energy: d.energy || null, answers: d.answers || [], photo: d.photo || null, updated_at: new Date().toISOString() })
 };
 const up = (table, row, conflict) => ({ op: 'up', table, row, conflict });
@@ -87,6 +89,8 @@ function fromRemote(r) {
   s.profile.name = (r.profiles[0] && r.profiles[0].name) || '';
   s.profile.prefs = r.profiles[0] && r.profiles[0].prefs ? r.profiles[0].prefs : (state.profile.prefs || {});
   (r.diary || []).forEach((d) => { s.diary[d.day] = { id: d.id, day: d.day, text: d.text || '', mood: d.mood, sleep: d.sleep, energy: d.energy, answers: d.answers || [], photo: d.photo }; });
+  s.workouts = (r.workouts || []).map((w) => ({ id: w.id, day: w.day, duration: w.duration, coach: !!w.coach, exercises: w.exercises || [], note: w.note || '' }));
+  s.billiards = (r.billiards || []).map((b) => ({ id: b.id, day: b.day, drills: b.drills || [], note: b.note || '' }));
   s.projects = r.projects.map((p) => ({ id: p.id, name: p.name, sphere: p.sphere, color: p.color, archived: p.archived }));
   s.tags = r.tags.map((t) => t.name);
   const local = new Map(state.tasks.map((t) => [t.id, t]));
@@ -114,6 +118,7 @@ export async function flush() {
       try {
         if (o.op === 'up') await db.upsert(o.table, o.row, o.conflict);
         if (o.op === 'up' && o.table === 'diary' && state.diary[o.row.day]) state.diary[o.row.day].unsynced = false;
+        else if (o.op === 'up' && (o.table === 'workouts' || o.table === 'billiards')) { const x = state[o.table].find((y) => y.id === o.row.id); if (x) x.unsynced = false; }
         else if (o.op === 'del') await db.remove(o.table, o.match);
         queue.shift(); persist();
       } catch (e) {
@@ -129,9 +134,9 @@ export async function flush() {
   try { return await flushing; } finally { flushing = null; }
 }
 
-const TABLES = ['profiles', 'projects', 'tags', 'tasks', 'inbox', 'habits', 'habit_log', 'events', 'diary'];
+const TABLES = ['profiles', 'projects', 'tags', 'tasks', 'inbox', 'habits', 'habit_log', 'events', 'diary', 'workouts', 'billiards'];
 // Таблица дневника появляется после запуска SQL — без неё панель всё равно работает
-const OPTIONAL = new Set(['diary']);
+const OPTIONAL = new Set(['diary', 'workouts', 'billiards']);
 export async function pull() {
   if (!userId) return null;
   await flush();
@@ -149,10 +154,16 @@ export async function pull() {
     Object.values(prev.diary || {}).forEach((d) => {
       if (!state.diary[d.day] && d.unsynced) { state.diary[d.day] = d; if (!sync.needsSql) queue.push(up('diary', R.diary(d), 'user_id,day')); }
     });
+    // То же для тренировок: несохранённые в базе не теряем
+    [['workouts', R.workout], ['billiards', R.billiard]].forEach(([k, row]) => {
+      const have = new Set(state[k].map((x) => x.id));
+      (prev[k] || []).forEach((x) => { if (x.unsynced && !have.has(x.id)) { state[k].push(x); if (!sync.needsSql) queue.push(up(k, row(x))); } });
+    });
     persist();
     if (queue.length) scheduleFlush(0);
   }
   sync.lastPull = Date.now(); sync.status = 'ok'; emit();
+  rolloverTasks();
   return { empty };
 }
 
@@ -163,7 +174,7 @@ export async function startSession(id) {
   queue = readJSON(queueKey(id)) || [];
   emit();
   try { return await pull(); }
-  catch (e) { sync.status = e.offline ? 'offline' : 'error'; sync.error = e.message; emit(); return { offline: !!e.offline, error: e }; }
+  catch (e) { sync.status = e.offline ? 'offline' : 'error'; sync.error = e.message; emit(); rolloverTasks(); return { offline: !!e.offline, error: e }; }
 }
 export function endSession() { userId = null; state = emptyState(); queue = []; sync.status = 'idle'; emit(); }
 
@@ -193,6 +204,8 @@ export function setupFresh({ name, legacy = null, keepDemo = false }) {
     s.inbox = L.inbox.filter(keep).map((i) => ({ ...i, demo: undefined }));
     s.events = L.events.filter(keep).map((e) => ({ ...e, demo: undefined }));
     s.diary = L.diary || {};
+    s.workouts = (L.workouts || []).map((w) => ({ ...w, unsynced: true }));
+    s.billiards = (L.billiards || []).map((b) => ({ ...b, unsynced: true }));
   } else {
     s.tags = [...DEFAULT_TAGS];
   }
@@ -206,6 +219,8 @@ export function setupFresh({ name, legacy = null, keepDemo = false }) {
   s.inbox.forEach((i) => ops.push(up('inbox', R.inbox(i))));
   s.events.forEach((e) => ops.push(up('events', R.event(e))));
   Object.values(s.diary).forEach((d) => { if (!d.id) d.id = uid(); ops.push(up('diary', R.diary(d), 'user_id,day')); });
+  s.workouts.forEach((w) => ops.push(up('workouts', R.workout(w))));
+  s.billiards.forEach((b) => ops.push(up('billiards', R.billiard(b))));
   state = s;
   queue.push(...ops);
   persist(); emit(); scheduleFlush(0);
@@ -237,6 +252,14 @@ export function toggleTask(id) {
   const t = state.tasks.find((x) => x.id === id); if (!t) return;
   updateTask(id, { status: t.status === 'done' ? (t.prevStatus || 'todo') : 'done', prevStatus: t.status === 'done' ? t.prevStatus : t.status });
 }
+// Невыполненные задачи с прошедшей датой сами переезжают на сегодня
+export function rolloverTasks(today = todayISO()) {
+  const late = state.tasks.filter((t) => t.status !== 'done' && t.date && t.date < today);
+  if (!late.length) return 0;
+  late.forEach((t) => { t.date = today; });
+  store.update(() => {}, late.map((t) => up('tasks', R.task(t))));
+  return late.length;
+}
 export function deleteTask(id) { store.update((s) => { s.tasks = s.tasks.filter((t) => t.id !== id); }, [del('tasks', { id })]); }
 
 export function addInbox(text) {
@@ -264,6 +287,24 @@ export function removeHabit(id) {
 }
 export function setName(name) { const ops = []; store.update((s) => { s.profile.name = name; ops.push(up('profiles', R.profile(s.profile))); }, ops); }
 export function setPrefs(patch) { const ops = []; store.update((s) => { s.profile.prefs = { ...(s.profile.prefs || {}), ...patch }; ops.push(up('profiles', R.profile(s.profile))); }, ops); }
+
+// ===== Спорт и бильярд =====
+export function saveWorkout(w) {
+  store.update((s) => {
+    const i = s.workouts.findIndex((x) => x.id === w.id);
+    const x = { ...w, unsynced: true };
+    if (i >= 0) s.workouts[i] = x; else s.workouts.push(x);
+  }, [up('workouts', R.workout(w))]);
+}
+export function deleteWorkout(id) { store.update((s) => { s.workouts = s.workouts.filter((x) => x.id !== id); }, [del('workouts', { id })]); }
+export function saveBilliard(b) {
+  store.update((s) => {
+    const i = s.billiards.findIndex((x) => x.id === b.id);
+    const x = { ...b, unsynced: true };
+    if (i >= 0) s.billiards[i] = x; else s.billiards.push(x);
+  }, [up('billiards', R.billiard(b))]);
+}
+export function deleteBilliard(id) { store.update((s) => { s.billiards = s.billiards.filter((x) => x.id !== id); }, [del('billiards', { id })]); }
 
 // ===== Дневник =====
 export function saveDiary(day, patch) {
@@ -313,7 +354,9 @@ export function resetAll() {
     s.projects.forEach((p) => ops.push(del('projects', { id: p.id })));
     Object.entries(s.habitLog).forEach(([day, hs]) => Object.keys(hs).forEach((hid) => ops.push(del('habit_log', { habit_id: hid, day }))));
     Object.values(s.diary).forEach((d) => ops.push(del('diary', { day: d.day })));
-    s.tasks = []; s.inbox = []; s.events = []; s.projects = []; s.habitLog = {}; s.diary = {};
+    s.workouts.forEach((w) => ops.push(del('workouts', { id: w.id })));
+    s.billiards.forEach((b) => ops.push(del('billiards', { id: b.id })));
+    s.tasks = []; s.inbox = []; s.events = []; s.projects = []; s.habitLog = {}; s.diary = {}; s.workouts = []; s.billiards = [];
   }, ops);
 }
 

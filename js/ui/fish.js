@@ -204,6 +204,45 @@ function spawn(initial = false) {
   anim.onfinish = () => el.remove();
 }
 
+// Пузырьки: поднимаются со дна, разного размера, покачиваются; иногда цепочкой
+let bubTimer = 0;
+function bubble(x, size, delay = 0) {
+  const box = seaBox(); if (!box) return;
+  const { sea, H } = box;
+  const b = document.createElement('span');
+  b.className = 'bub jsbub';
+  b.style.cssText = `width:${size}px;height:${size}px;left:0;top:0;opacity:0`;
+  sea.appendChild(b);
+  const v = 22 + size * 5 + R(-6, 10);                 // крупные всплывают быстрее
+  const dur = (H + 20) / v;
+  const amp = R(2, 5 + size * 0.6), n = 6;
+  const ph = R(0, Math.PI * 2);
+  const frames = [];
+  for (let i = 0; i <= n; i++) {
+    const k = i / n;
+    const dx = Math.sin(ph + k * Math.PI * R(2.5, 3.5)) * amp;
+    const sq = 1 + Math.sin(ph + k * 9) * 0.06;
+    frames.push({ offset: k, opacity: k < 0.05 ? 0 : k > 0.85 ? (1 - k) / 0.15 * 0.9 : 0.9, transform: `translate(${(x + dx).toFixed(1)}px, ${(H + 10 - k * (H + 30)).toFixed(1)}px) scale(${sq.toFixed(3)}, ${(2 - sq).toFixed(3)})` });
+  }
+  const a = b.animate(frames, { duration: dur * 1000, delay: delay * 1000, easing: 'linear', fill: 'both' });
+  a.onfinish = () => b.remove();
+}
+function bubbleLoop() {
+  clearTimeout(bubTimer);
+  const box = seaBox();
+  if (box && !document.hidden && box.sea.querySelectorAll('.jsbub').length < 42) {
+    const x = R(6, box.W - 10);
+    if (Math.random() < 0.22) {                       // цепочка мелких пузырьков
+      const k = 3 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < k; i++) bubble(x + R(-3, 3), R(2, 5), i * R(0.25, 0.5));
+    } else {
+      const r = Math.random();
+      bubble(x, r < 0.4 ? R(3, 5) : r < 0.8 ? R(5, 9) : R(9, 14));
+    }
+  }
+  bubTimer = setTimeout(bubbleLoop, R(250, 750));
+}
+
 function loop() {
   clearTimeout(timer);
   if (!document.hidden) spawn();
@@ -217,6 +256,7 @@ export function startFish() {
   const first = () => {
     if (!seaBox()) { timer = setTimeout(first, 800); return; }
     spawn(true); setTimeout(() => spawn(true), 400);
+    bubbleLoop();
     timer = setTimeout(loop, R(2500, 6000));
   };
   first();

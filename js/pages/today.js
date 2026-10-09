@@ -14,7 +14,6 @@ export function render(s, ui) {
   const total = todayTasks.length;
   const pct = total ? Math.round((done / total) * 100) : 0;
   const events = s.events.filter((e) => e.date === today).sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
-  const overdue = s.tasks.filter((t) => t.date && t.date < today && t.status !== 'done').length;
 
   // Фильтр: сфера или конкретный проект
   const filtered = todayTasks.filter((t) => {
@@ -29,15 +28,8 @@ export function render(s, ui) {
   });
 
   const nextEvent = events.find((e) => e.time && e.time >= new Date().toTimeString().slice(0, 5));
-  const left = total - done;
-  const evPart = events.length ? ` и ${events.length} ${plural(events.length, ['событие', 'события', 'событий'])}` : '';
-  let summary;
-  if (!total) summary = events.length ? `Задач на сегодня нет, но в календаре ${events.length} ${plural(events.length, ['событие', 'события', 'событий'])}.` : 'На сегодня чисто. Добавь задачу или просто поплавай в тишине.';
-  else if (!left) summary = 'Всё сделано! Сфера полная — можно выдыхать.';
-  else if (!done) summary = `Впереди ${total} ${plural(total, ['задача', 'задачи', 'задач'])}${evPart}. Начнём с маленькой?`;
-  else summary = `Осталось ${left} из ${total}${evPart}. Хороший темп.`;
-  if (nextEvent) summary += ` Дальше — «${esc(nextEvent.title)}» в ${esc(nextEvent.time)}.`;
-  if (overdue) summary += ` Из прошлых дней хвостов: ${overdue}.`;
+  // Без «осталось N из M» — цифры уже есть в шаре справа; тут только ближайшее событие
+  const summary = nextEvent ? `Дальше — «${esc(nextEvent.title)}» в ${esc(nextEvent.time)}.` : '';
   const streak = diaryStreak();
   const wroteToday = !!(s.diary && s.diary[today] && (s.diary[today].text || s.diary[today].mood || (s.diary[today].answers || []).length));
 
@@ -77,7 +69,7 @@ export function render(s, ui) {
     </div>
     <div class="hero-row">
       <div class="hero-text">
-        <div style="font-size:18px;line-height:1.5;max-width:560px">${summary}</div>
+        ${summary ? `<div style="font-size:18px;line-height:1.5;max-width:560px">${summary}</div>` : ''}
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn white" data-action="add-task">${icon('plus', 18, 2.2)}Задача</button>
           <button class="btn glass" data-action="add-event">${icon('calendar', 18)}Событие</button>

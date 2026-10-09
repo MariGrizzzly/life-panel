@@ -7,8 +7,8 @@ export const SECTIONS = [
   { id: 'calendar', label: 'Календарь', group: 'daily', soon: true },
   { id: 'diary', label: 'Дневник', group: 'daily' },
   { id: 'goals', label: 'Цели и привычки', group: 'mine', soon: true },
-  { id: 'sport', label: 'Спорт', group: 'mine', soon: true },
-  { id: 'billiards', label: 'Бильярд', group: 'mine', soon: true },
+  { id: 'sport', label: 'Спорт', group: 'mine' },
+  { id: 'billiards', label: 'Бильярд', group: 'mine' },
   { id: 'english', label: 'Английский', group: 'mine', soon: true },
   { id: 'reading', label: 'Чтение', group: 'mine', soon: true },
   { id: 'blog', label: 'Блог', group: 'mine', soon: true },
@@ -52,11 +52,18 @@ export function sidebar({ section, name, badges, backupTitle, backupText, backup
 </nav>`;
 }
 
-export function tabbar(section) {
+const MAIN_TABS = ['today', 'tasks', 'diary'];
+export function tabbar(section, moreOpen = false) {
   const a = (id, label, ic) => `<a href="#${id}" class="${section === id ? 'on' : ''}">${icon(ic, 22)}${label}</a>`;
+  const inMore = !MAIN_TABS.includes(section);
+  const sheet = moreOpen ? `<div class="moresheet fade" role="menu" aria-label="Все разделы">
+      ${SECTIONS.filter((x) => !MAIN_TABS.includes(x.id)).map((x) => `<a href="#${x.id}" role="menuitem" class="${x.id === section ? 'on' : ''}${x.soon ? ' soon' : ''}">${icon(x.id === 'settings' ? 'settings' : x.id, 22)}<span>${esc(x.label)}</span></a>`).join('')}
+    </div>` : '';
   return `<nav class="tabbar" aria-label="Разделы" data-key="tabbar">
+    ${sheet}
     ${a('today', 'Сегодня', 'today')}${a('tasks', 'Задачи', 'tasks')}
     <button class="plus" data-action="add-task" aria-label="Новая задача">${icon('plus', 24, 2.2)}</button>
-    ${a('diary', 'Дневник', 'diary')}${a('settings', 'Ещё', 'menu')}
+    ${a('diary', 'Дневник', 'diary')}
+    <button class="${inMore || moreOpen ? 'on' : ''}" data-action="more-menu" aria-expanded="${moreOpen}" aria-haspopup="menu">${icon('menu', 22)}${inMore ? esc((SECTIONS.find((x) => x.id === section) || {}).label || 'Ещё').split(' ')[0] : 'Ещё'}</button>
   </nav>`;
 }

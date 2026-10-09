@@ -15,8 +15,11 @@ import * as Tasks from './pages/tasks.js';
 import * as Settings from './pages/settings.js';
 import { syncText } from './pages/settings.js';
 import { soonPage } from './pages/shared.js';
+import * as Sport from './pages/sport.js';
+import * as Billiards from './pages/billiards.js';
+import { workoutModal, billiardModal } from './ui/sportModals.js';
 
-const PAGES = { today: Today, tasks: Tasks, settings: Settings, diary: Diary };
+const PAGES = { today: Today, tasks: Tasks, settings: Settings, diary: Diary, sport: Sport, billiards: Billiards };
 const SOON = {
   calendar: 'Неделя и месяц, события из Apple Календаря, задачи со временем. Добавлять события уже можно — кнопка «Событие» на «Сегодня».',
   diary: 'Запись дня, настроение смайликами, вопросы на выбор, серия дней подряд, фото дня и выгрузка в Apple Дневник.',
@@ -71,7 +74,7 @@ function render() {
         ${body}
       </div>
     </main>
-    ${tabbar(ui.section)}
+    ${tabbar(ui.section, ui.moreMenu)}
   </div>`;
   patch(app, html);
   document.title = `${label || 'Сегодня'} — Моя панель`;
@@ -140,11 +143,16 @@ const actions = {
   'photo-month': (el) => { ui.photoMonth = el.dataset.to; render(); },
   'set-status': (el) => updateTask(el.dataset.id, { status: el.dataset.status }),
   'add-event': () => eventModal(),
+  'more-menu': () => { ui.moreMenu = !ui.moreMenu; render(); },
+  'workout-add': () => workoutModal(),
+  'workout-edit': (el) => workoutModal({ id: el.dataset.id }),
+  'billiard-add': () => billiardModal(),
+  'billiard-edit': (el) => billiardModal({ id: el.dataset.id }),
   'add-project': () => { ui.listMenu = false; projectModal((id) => { if (ui.section === 'tasks') { ui.taskSel = id; render(); } }); },
   'habit': (el) => toggleHabit(el.dataset.id),
   'sign-out': async () => { if (await ask('Выйти из аккаунта на этом устройстве?', { ok: 'Выйти' })) { await auth.signOut(); } },
   'pr-menu': () => { ui.prMenu = !ui.prMenu; render(); },
-  'pr-pick': (el) => { ui.todayPr = el.dataset.id; ui.prMenu = false; render(); },
+  'pr-pick': (el) => { ui.todayPr = el.dataset.id; ui.prMenu = false; ui.moreMenu = false; render(); },
   'today-sphere': (el) => { ui.todaySphere = el.dataset.id; ui.todayPr = 'all'; render(); },
   'go': (el) => { if (el.dataset.view) { ui.taskView = el.dataset.view; ui.taskSel = 'today'; } location.hash = '#' + el.dataset.to; },
   'toggle-list-menu': () => { ui.listMenu = !ui.listMenu; render(); },
@@ -292,10 +300,10 @@ app.addEventListener('click', (e) => {
   if (tab) { e.preventDefault(); const em = document.getElementById('a-email'); if (em) ui.authEmail = em.value; ui.authTab = tab.dataset.authTab; setMsg(''); render(); return; }
   const el = e.target.closest('[data-action]');
   if (!el || el.tagName === 'FORM') {
-    if ((ui.listMenu || ui.qMenu || ui.prMenu) && !e.target.closest('.menu')) { ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; render(); }
+    if ((ui.listMenu || ui.qMenu || ui.prMenu || ui.moreMenu) && !e.target.closest('.menu, .moresheet')) { ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; ui.moreMenu = false; render(); }
     return;
   }
-  if ((ui.listMenu || ui.qMenu || ui.prMenu) && !e.target.closest('.menu') && !['toggle-list-menu', 'diary-q-menu', 'pr-menu'].includes(el.dataset.action)) { ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; }
+  if ((ui.listMenu || ui.qMenu || ui.prMenu || ui.moreMenu) && !e.target.closest('.menu, .moresheet') && !['toggle-list-menu', 'diary-q-menu', 'pr-menu', 'more-menu'].includes(el.dataset.action)) { ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; ui.moreMenu = false; }
   const fn = actions[el.dataset.action];
   if (fn) { e.preventDefault(); fn(el, e); }
 });
@@ -328,11 +336,11 @@ app.addEventListener('change', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (ui.listMenu || ui.qMenu || ui.prMenu) { ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; render(); }
+  if (ui.listMenu || ui.qMenu || ui.prMenu || ui.moreMenu) { ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; ui.moreMenu = false; render(); }
   else if (ui.quickAdd && e.target.closest && e.target.closest('.quick-add')) { ui.quickAdd = null; render(); }
 });
 
-window.addEventListener('hashchange', () => { flushDiary(); readHash(); ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; ui.quickAdd = null; render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { flushDiary(); readHash(); ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; ui.moreMenu = false; ui.quickAdd = null; render(); window.scrollTo(0, 0); });
 store.subscribe(() => { if (ui.screen === 'app') render(); });
 auth.onChange((sess) => {
   if (!sess && ui.screen !== 'login') { endSession(); ui.screen = 'login'; ui.authTab = 'login'; setMsg('Ты вышла из аккаунта'); render(); }
