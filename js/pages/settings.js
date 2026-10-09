@@ -1,7 +1,8 @@
 import { esc } from '../util.js';
 import { SPHERES, sync } from '../store.js';
+import { greetingsOf, questionsOf } from '../texts.js';
 
-export function title() { return ['Настройки', 'Аккаунт, проекты, привычки и бэкап']; }
+export function title() { return ['Настройки', 'Аккаунт, проекты, привычки, твои тексты и бэкап']; }
 
 const SYNC_TEXT = {
   ok: 'Всё сохранено в облаке',
@@ -55,8 +56,25 @@ export function render(s, ui) {
       <form data-action="add-habit" style="display:flex;gap:8px"><label for="nh" class="sr">Новая привычка</label><input id="nh" name="name" class="input" placeholder="Новая привычка" autocomplete="off"><button class="btn ghost" type="submit">Добавить</button></form>
     </section>
   </div>
+  <section class="card" style="display:flex;flex-direction:column;gap:14px">
+    <div><h2 class="h2">Мои тексты</h2><div class="muted" style="font-size:14px;margin-top:4px;line-height:1.5">Меняй как хочешь — по одной фразе на строку. Пустые строки не считаются.</div></div>
+    <div class="row2">
+      <form data-action="save-greetings" class="field" style="flex:1 1 340px;gap:8px">
+        <label class="label" for="pr-greet">Приветствия наверху «Сегодня» — каждый раз случайное</label>
+        <textarea id="pr-greet" name="lines" class="ta" rows="8" data-skip-morph>${esc(greetingsOf(s).join('\n'))}</textarea>
+        <div class="muted" style="font-size:12px;line-height:1.5"><b>{имя}</b> — подставится имя, <b>{приветствие}</b> — «Доброе утро», «Добрый день» или «Добрый вечер» по времени.</div>
+        <div><button class="btn ghost small" type="submit">Сохранить приветствия</button></div>
+      </form>
+      <form data-action="save-questions" class="field" style="flex:1 1 340px;gap:8px">
+        <label class="label" for="pr-q">Вопросы для дневника</label>
+        <textarea id="pr-q" name="lines" class="ta" rows="8" data-skip-morph>${esc(questionsOf(s).join('\n'))}</textarea>
+        <div class="muted" style="font-size:12px;line-height:1.5">Они появляются в меню «Добавить вопрос» на странице дневника.</div>
+        <div><button class="btn ghost small" type="submit">Сохранить вопросы</button></div>
+      </form>
+    </div>
+  </section>
   <section class="card" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
-    <div class="muted" style="font-size:14px">Начать с чистого листа: удалит все задачи, проекты, события и отметки привычек.</div>
+    <div class="muted" style="font-size:14px">Начать с чистого листа: удалит задачи, проекты, события, дневник и отметки привычек.</div>
     <button class="btn danger" data-action="reset-all">Удалить всё</button>
   </section>
 </div>`;

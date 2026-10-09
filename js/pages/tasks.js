@@ -2,8 +2,10 @@ import { esc, todayISO, whenOf, WHEN_LABEL, WHEN_ORDER, dayMonth, shortDate } fr
 import { icon } from '../ui/icons.js';
 import { projectOf, NO_PROJECT } from '../store.js';
 import { taskRow, checkbox, dueChip } from './shared.js';
+import { quickAddForm } from './today.js';
+import { addDays } from '../util.js';
 
-const SMART = { inbox: 'Входящие', today: 'Сегодня', upcoming: 'Предстоящие', nodate: 'Без даты', all: 'Все задачи', done: 'Выполненные' };
+const SMART = { inbox: 'Улов', today: 'Сегодня', upcoming: 'Предстоящие', nodate: 'Без даты', all: 'Все задачи', done: 'Выполненные' };
 
 export function title() { return ['Задачи', 'По проектам — списком, доской или отчётом за день']; }
 
@@ -50,7 +52,7 @@ export function render(s, ui) {
 
   let body = '';
   if (view === 'inbox') body = inboxView(s);
-  else if (view === 'list') body = listView(s, tasks, isProject, today);
+  else if (view === 'list') body = listView(s, tasks, isProject, today, ui, sel);
   else if (view === 'board') body = boardView(tasks);
   else body = reportView(s, today);
 
@@ -69,8 +71,9 @@ export function render(s, ui) {
   </section>`;
 }
 
-function listView(s, tasks, isProject, today) {
-  if (!tasks.length) return '<div class="empty">Здесь пусто. Нажми «Задача», чтобы добавить.</div>';
+function listView(s, tasks, isProject, today, ui, sel) {
+  if (!tasks.length) return '<div class="empty">Тут пока пусто. Нажми «Задача», и появится первая.</div>';
+  const qDate = sel === 'upcoming' ? addDays(today, 1) : sel === 'nodate' ? '' : today;
   let groups;
   if (isProject) {
     groups = WHEN_ORDER.map((w) => ({ key: w, name: WHEN_LABEL[w], color: w === 'overdue' ? '#C2412D' : '#9AAAB5', items: tasks.filter((t) => whenOf(t, today) === w) })).filter((g) => g.items.length);
@@ -79,12 +82,13 @@ function listView(s, tasks, isProject, today) {
   }
   return `<div style="display:flex;flex-direction:column;gap:18px">${groups.map((g) => `
     <div data-key="g-${esc(g.key)}">
-      <div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;padding:4px 0 6px;color:${g.key === 'overdue' ? '#A23B2A' : 'inherit'}"><span class="pdot" style="background:${esc(g.color)}"></span>${esc(g.name)}<span class="muted" style="font-weight:500;font-size:13px">${g.items.length}</span></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;padding:4px 0 6px;color:${g.key === 'overdue' ? '#A23B2A' : 'inherit'}"><span class="pdot" style="background:${esc(g.color)}"></span>${esc(g.name)}<span class="muted" style="font-weight:500;font-size:13px">${g.items.length}</span>${isProject ? '' : `<button class="iconbtn" data-action="quick-open" data-project="${esc(g.key)}" aria-label="Добавить задачу в «${esc(g.name)}»" title="Добавить задачу">${icon('plus', 18, 2.2)}</button>`}</div>
       ${g.items.sort(sortTasks).map((t) => {
         const w = whenOf(t, today);
         const meta = [isProject ? '' : (w === 'today' ? '' : (t.date ? (w === 'overdue' ? 'просрочено · ' : '') + shortDate(t.date) : '')), t.time].filter(Boolean).join(' · ');
         return taskRow(t, { meta, wide: true });
       }).join('')}
+      ${isProject ? '' : quickAddForm(ui, g.key, qDate)}
     </div>`).join('')}</div>`;
 }
 
@@ -159,12 +163,12 @@ function reportView(s, today) {
 }
 
 function inboxView(s) {
-  if (!s.inbox.length) return '<div class="empty">Входящие пусты. Мысли и идеи из строки на «Сегодня» попадают сюда.</div>';
+  if (!s.inbox.length) return '<div class="empty">Улов пуст. Мысли и идеи, которые ты закидываешь со страницы «Сегодня», появятся здесь.</div>';
   return `<div style="display:flex;flex-direction:column;gap:10px">
-    <div class="muted" style="font-size:14px">Сюда падают мысли и идеи из быстрой записи. Раз в день раскидывай их по местам.</div>
+    <div class="muted" style="font-size:14px;line-height:1.55">Мысли, идеи и ссылки, пойманные на лету. Загляни сюда раз в день: что-то станет задачей, что-то можно отпустить.</div>
     ${s.inbox.map((i) => `<div data-key="in-${esc(i.id)}" style="border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
       <div style="flex:1 1 240px;font-size:14px">${esc(i.text)}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn ghost small" data-action="inbox-to-task" data-id="${esc(i.id)}">В задачи</button><button class="btn ghost small" data-action="inbox-delete" data-id="${esc(i.id)}">Удалить</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn ghost small" data-action="inbox-to-task" data-id="${esc(i.id)}">Сделать задачей</button><button class="btn ghost small" data-action="inbox-delete" data-id="${esc(i.id)}">Отпустить</button></div>
     </div>`).join('')}
   </div>`;
 }

@@ -1,4 +1,8 @@
-import { store, sync, toggleTask, updateTask, addInbox, removeInbox, toggleHabit, exportData, importData, markBackup, archiveProject, addHabit, removeHabit, setName, resetAll, startSession, endSession, pull, flush, legacyData, forgetLegacy, setupFresh } from './store.js';
+import { store, sync, toggleTask, updateTask, addInbox, removeInbox, toggleHabit, exportData, importData, markBackup, archiveProject, addHabit, removeHabit, setName, resetAll, startSession, endSession, pull, flush, legacyData, forgetLegacy, setupFresh, setPrefs, saveDiary, currentUserId, addTask } from './store.js';
+import * as Diary from './pages/diary.js';
+import { uploadPhoto, removePhoto, onPhotoLoaded } from './photos.js';
+import { resetGreeting } from './texts.js';
+import { icon } from './ui/icons.js';
 import { auth } from './remote.js';
 import * as Auth from './pages/auth.js';
 import { esc, todayISO } from './util.js';
@@ -11,7 +15,7 @@ import * as Settings from './pages/settings.js';
 import { syncText } from './pages/settings.js';
 import { soonPage } from './pages/shared.js';
 
-const PAGES = { today: Today, tasks: Tasks, settings: Settings };
+const PAGES = { today: Today, tasks: Tasks, settings: Settings, diary: Diary };
 const SOON = {
   calendar: 'Неделя и месяц, события из Apple Календаря, задачи со временем. Добавлять события уже можно — кнопка «Событие» на «Сегодня».',
   diary: 'Запись дня, настроение смайликами, вопросы на выбор, серия дней подряд, фото дня и выгрузка в Apple Дневник.',
@@ -51,7 +55,7 @@ function render() {
 
   const page = PAGES[ui.section];
   const label = (SECTIONS.find((x) => x.id === ui.section) || {}).label;
-  const [h1, sub] = page ? page.title(s) : [label, ''];
+  const [h1, sub] = page ? page.title(s, ui) : [label, ''];
   ui.email = (auth.user() || {}).email || '';
   const body = page ? page.render(s, ui) : soonPage(label, SOON[ui.section] || '');
 
@@ -60,7 +64,8 @@ function render() {
     <main class="main" id="main" data-key="main">
       <div class="wrap">
         <header style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px" data-key="hdr">
-          <div><h1 class="disp" style="margin:0;font-size:28px;color:var(--deep)">${esc(h1)}</h1><div class="muted" style="font-size:14px;margin-top:6px">${esc(sub)}</div></div>
+          <div style="min-width:0"><h1 class="disp" style="margin:0;font-size:28px;color:var(--deep);text-wrap:balance">${esc(h1)}</h1><div class="muted" style="font-size:14px;margin-top:6px">${esc(sub)}</div></div>
+          <button class="hdr-sync${ui.syncing ? ' spin' : ''}" data-action="sync-now" title="Обновить данные"><span class="dot${backupWarn ? ' warn' : ''}"></span>${esc(ui.syncing ? 'Обновляю…' : sync.status === 'offline' ? 'Нет связи' : sync.status === 'saving' ? 'Сохраняю…' : 'Обновить')}${icon('refresh', 16, 2)}</button>
         </header>
         ${body}
       </div>
@@ -69,6 +74,8 @@ function render() {
   </div>`;
   patch(app, html);
   document.title = `${label || 'Сегодня'} — Моя панель`;
+  const af = app.querySelector('[data-autofocus]');
+  if (af && document.activeElement !== af && !af.dataset.focused) { af.dataset.focused = '1'; af.focus(); }
 }
 
 function toast(msg) {
@@ -89,7 +96,47 @@ function download(name, text) {
 const actions = {
   'toggle-task': (el) => toggleTask(el.dataset.id),
   'edit-task': (el) => taskModal({ id: el.dataset.id }),
-  'add-task': (el) => taskModal({ projectId: el.dataset.project || '' }),
+  'add-task': (el) => taskModal(el.dataset.project ? { projectId: el.dataset.project } : {}),
+  'quick-open': (el) => { ui.quickAdd = ui.quickAdd === el.dataset.project ? null : el.dataset.project; render(); },
+  'quick-close': () => { ui.quickAdd = null; render(); },
+  'quick-more': (el) => {
+    const f = el.closest('form'); const key = f.dataset.project;
+    taskModal({ title: f.title.value.trim(), projectId: key === 'none' ? '' : key, date: f.dataset.date });
+    ui.quickAdd = null; render();
+  },
+  'sync-now': async () => {
+    ui.syncing = true; render();
+    try { await pull(); toast('Данные обновлены'); } catch (e) { toast(e.offline ? 'Нет связи — попробую позже' : 'Не получилось: ' + e.message); }
+    ui.syncing = false; render();
+  },
+  'diary-tab': (el) => { ui.diaryTab = el.dataset.id; ui.qMenu = false; render(); },
+  'diary-day': (el) => { flushDiary(); ui.diaryDay = el.dataset.to; ui.qMenu = false; render(); },
+  'diary-open': (el) => { flushDiary(); ui.diaryDay = el.dataset.day; ui.diaryTab = 'write'; render(); window.scrollTo(0, 0); },
+  'diary-mood': (el) => { const d = curDiary(); const v = Number(el.dataset.v); saveDiary(diaryDay(), { mood: d.mood === v ? null : v }); },
+  'diary-energy': (el) => { const d = curDiary(); const v = Number(el.dataset.v); saveDiary(diaryDay(), { energy: d.energy === v ? null : v }); },
+  'diary-sleep': (el) => { const d = curDiary(); const cur = d.sleep === null || d.sleep === undefined || d.sleep === '' ? 7.5 - Number(el.dataset.step) : Number(d.sleep); saveDiary(diaryDay(), { sleep: Math.max(0, Math.min(16, cur + Number(el.dataset.step))) }); },
+  'diary-q-menu': () => { ui.qMenu = !ui.qMenu; render(); },
+  'diary-q-add': (el) => { addQuestion(el.dataset.q); },
+  'diary-q-remove': async (el) => {
+    flushDiary(); const d = curDiary(); const i = Number(el.dataset.i); const a = d.answers[i];
+    if (a && (a.a || '').trim() && !(await ask('Убрать вопрос вместе с ответом?', { ok: 'Убрать' }))) return;
+    saveDiary(diaryDay(), { answers: d.answers.filter((_, j) => j !== i) });
+  },
+  'diary-ctx': (el) => {
+    flushDiary(); const d = curDiary(); const add = el.dataset.text;
+    saveDiary(diaryDay(), { text: (d.text || '').trim() ? `${d.text.replace(/\s+$/, '')}\n${add}` : add });
+    const ta = document.getElementById('d-text'); if (ta) { ta.value = curDiary().text; ta.focus(); }
+  },
+  'diary-copy': async (el) => {
+    flushDiary(); const txt = Diary.entryText(store.get(), el.dataset.day);
+    if (!txt) { toast('Запись пустая'); return; }
+    try { await navigator.clipboard.writeText(txt); toast('Скопировано — вставь в Apple Дневник'); } catch (e) { toast('Не получилось скопировать'); }
+  },
+  'diary-photo-remove': async () => {
+    const d = curDiary(); if (!d.photo || !(await ask('Убрать фото дня?', { ok: 'Убрать' }))) return;
+    const path = d.photo; saveDiary(diaryDay(), { photo: null }); removePhoto(path);
+  },
+  'photo-month': (el) => { ui.photoMonth = el.dataset.to; render(); },
   'set-status': (el) => updateTask(el.dataset.id, { status: el.dataset.status }),
   'add-event': () => eventModal(),
   'add-project': () => { ui.listMenu = false; projectModal((id) => { if (ui.section === 'tasks') { ui.taskSel = id; render(); } }); },
@@ -118,7 +165,16 @@ const actions = {
 };
 
 const forms = {
-  'quick-inbox': (form) => { const v = form.text.value.trim(); if (!v) return; addInbox(v); form.text.value = ''; toast('Записано во входящие'); },
+  'quick-inbox': (form) => { const v = form.text.value.trim(); if (!v) return; addInbox(v); form.text.value = ''; toast('Поймала! Лежит в улове'); },
+  'quick-task': (form) => {
+    const v = form.title.value.trim(); if (!v) { ui.quickAdd = null; render(); return; }
+    const key = form.dataset.project;
+    addTask({ title: v, projectId: key === 'none' ? null : key, date: form.dataset.date || null });
+    form.title.value = ''; form.title.focus();
+  },
+  'diary-q-custom': (form) => { const v = form.q.value.trim(); if (!v) return; addQuestion(v); },
+  'save-greetings': (form) => { setPrefs({ greetings: lines(form.lines.value) }); resetGreeting(); toast('Приветствия сохранены'); },
+  'save-questions': (form) => { setPrefs({ questions: lines(form.lines.value) }); toast('Вопросы сохранены'); },
   'save-name': (form) => { setName(form.name.value.trim()); toast('Сохранено'); },
   'add-habit': (form) => { const v = form.name.value.trim(); if (!v) return; addHabit(v); form.name.value = ''; },
   'change-password': async (form) => {
@@ -127,6 +183,43 @@ const forms = {
     try { await auth.setPassword(v); form.password.value = ''; toast('Пароль изменён'); } catch (e) { toast(e.message); }
   }
 };
+
+const lines = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean);
+
+// ===== Дневник: автосохранение =====
+const diaryDay = () => ui.diaryDay || todayISO();
+const curDiary = () => store.get().diary[diaryDay()] || { text: '', answers: [] };
+let diaryTimer = null; let diaryPending = null;
+function collectDiary(day) {
+  const patchD = {};
+  const ta = app.querySelector(`[data-diary="text"][data-day="${day}"]`);
+  if (ta) patchD.text = ta.value;
+  const ans = app.querySelectorAll(`[data-diary="answer"][data-day="${day}"]`);
+  if (ans.length) {
+    const cur = (store.get().diary[day] || {}).answers || [];
+    patchD.answers = cur.map((a, i) => { const el = [...ans].find((x) => Number(x.dataset.i) === i); return el ? { ...a, a: el.value } : a; });
+  }
+  return patchD;
+}
+function flushDiary() {
+  clearTimeout(diaryTimer);
+  if (diaryPending) { const day = diaryPending; diaryPending = null; saveDiary(day, collectDiary(day)); }
+}
+function addQuestion(q) {
+  flushDiary(); const d = curDiary();
+  const id = Date.now().toString(36);
+  saveDiary(diaryDay(), { answers: [...(d.answers || []), { id, q, a: '' }] });
+  ui.qMenu = false; render();
+  setTimeout(() => { const el = document.getElementById('ans-' + id); if (el) el.focus(); }, 30);
+}
+app.addEventListener('input', (e) => {
+  const el = e.target;
+  if (el.dataset.diary) { diaryPending = el.dataset.day; clearTimeout(diaryTimer); diaryTimer = setTimeout(flushDiary, 700); }
+  if (el.dataset.input === 'diary-search') { ui.diaryQuery = el.value; render(); }
+});
+app.addEventListener('focusout', (e) => { if (e.target.dataset && e.target.dataset.diary) flushDiary(); });
+window.addEventListener('pagehide', flushDiary);
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushDiary(); });
 
 // ===== Вход и запуск =====
 const setMsg = (text, kind = '') => { ui.authMsg = text; ui.authMsgKind = kind; };
@@ -196,9 +289,10 @@ app.addEventListener('click', (e) => {
   if (tab) { e.preventDefault(); const em = document.getElementById('a-email'); if (em) ui.authEmail = em.value; ui.authTab = tab.dataset.authTab; setMsg(''); render(); return; }
   const el = e.target.closest('[data-action]');
   if (!el || el.tagName === 'FORM') {
-    if (ui.listMenu && !e.target.closest('.menu')) { ui.listMenu = false; render(); }
+    if ((ui.listMenu || ui.qMenu) && !e.target.closest('.menu')) { ui.listMenu = false; ui.qMenu = false; render(); }
     return;
   }
+  if ((ui.listMenu || ui.qMenu) && !e.target.closest('.menu') && !['toggle-list-menu', 'diary-q-menu'].includes(el.dataset.action)) { ui.listMenu = false; ui.qMenu = false; }
   const fn = actions[el.dataset.action];
   if (fn) { e.preventDefault(); fn(el, e); }
 });
@@ -211,6 +305,14 @@ app.addEventListener('submit', (e) => {
 app.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset.change === 'today-project') { ui.todayPr = el.value; render(); }
+  if (el.dataset.change === 'diary-photo' && el.files && el.files[0]) {
+    const day = el.dataset.day; const file = el.files[0]; const old = (store.get().diary[day] || {}).photo;
+    ui.photoBusy = true; render();
+    uploadPhoto(currentUserId(), day, file)
+      .then((path) => { saveDiary(day, { photo: path }); if (old) removePhoto(old); toast('Фото дня сохранено'); })
+      .catch((err) => toast(err.offline ? 'Нет связи — фото не загрузилось' : 'Фото не загрузилось: ' + err.message))
+      .finally(() => { ui.photoBusy = false; el.value = ''; render(); });
+  }
   if (el.dataset.change === 'import' && el.files && el.files[0]) {
     const r = new FileReader();
     r.onload = async () => {
@@ -221,9 +323,13 @@ app.addEventListener('change', (e) => {
     r.readAsText(el.files[0]);
   }
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && ui.listMenu) { ui.listMenu = false; render(); } });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (ui.listMenu || ui.qMenu) { ui.listMenu = false; ui.qMenu = false; render(); }
+  else if (ui.quickAdd && e.target.closest && e.target.closest('.quick-add')) { ui.quickAdd = null; render(); }
+});
 
-window.addEventListener('hashchange', () => { readHash(); ui.listMenu = false; render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { flushDiary(); readHash(); ui.listMenu = false; ui.qMenu = false; ui.quickAdd = null; render(); window.scrollTo(0, 0); });
 store.subscribe(() => { if (ui.screen === 'app') render(); });
 auth.onChange((sess) => {
   if (!sess && ui.screen !== 'login') { endSession(); ui.screen = 'login'; ui.authTab = 'login'; setMsg('Ты вышла из аккаунта'); render(); }
@@ -231,14 +337,18 @@ auth.onChange((sess) => {
 
 // Возвращаемся в приложение (например, с другого устройства что-то добавили) — подтягиваем свежие данные
 let lastPullAt = 0;
-function refresh() {
+function refresh(minGap = 5000) {
   if (ui.screen !== 'app' || document.hidden) return;
-  if (Date.now() - lastPullAt < 15000) return;
+  if (Date.now() - lastPullAt < minGap) return;
+  if (diaryPending || (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.diary)) return; // не мешаем писать
   lastPullAt = Date.now();
   pull().catch(() => {});
 }
-document.addEventListener('visibilitychange', refresh);
-window.addEventListener('focus', refresh);
+document.addEventListener('visibilitychange', () => refresh());
+window.addEventListener('focus', () => refresh());
+window.addEventListener('pageshow', () => refresh(0));
+setInterval(() => refresh(55000), 60000);
+onPhotoLoaded(() => { if (ui.screen === 'app') render(); });
 window.addEventListener('online', () => { if (ui.screen === 'app') flush().then(() => pull()).catch(() => {}); });
 setInterval(() => { if (ui.screen === 'app' && sync.pending) flush().catch(() => {}); }, 30000);
 

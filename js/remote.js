@@ -33,19 +33,20 @@ const AUTH_ERRORS = {
   same_password: 'Новый пароль совпадает со старым'
 };
 
-async function call(path, { method = 'GET', body, auth = true, headers = {} } = {}) {
+async function call(path, { method = 'GET', body, auth = true, headers = {}, raw = false, blob = false } = {}) {
   const h = { apikey: SUPABASE_KEY, ...headers };
-  if (body !== undefined) h['Content-Type'] = 'application/json';
+  if (body !== undefined && !raw) h['Content-Type'] = 'application/json';
   if (auth) {
     await ensureFresh();
     if (session) h.Authorization = 'Bearer ' + session.access_token;
   }
   let res;
   try {
-    res = await fetch(SUPABASE_URL + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
+    res = await fetch(SUPABASE_URL + path, { method, headers: h, body: body === undefined ? undefined : (raw ? body : JSON.stringify(body)), cache: 'no-store' });
   } catch (e) {
     throw new RemoteError('Нет связи с сервером', 0, true);
   }
+  if (blob && res.ok) return res.blob();
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
@@ -53,7 +54,9 @@ async function call(path, { method = 'GET', body, auth = true, headers = {} } = 
     if (res.status === 401 && auth && session) { writeSession(null); }
     const code = data && (data.error_code || data.code || data.error);
     const msg = (code && AUTH_ERRORS[code]) || (data && (data.msg || data.message || data.error_description)) || ('Ошибка сервера ' + res.status);
-    throw new RemoteError(msg, res.status);
+    const err = new RemoteError(msg, res.status);
+    err.code = data && data.code;
+    throw err;
   }
   return data;
 }
@@ -134,4 +137,13 @@ export const db = {
     const q = Object.entries(match).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
     return call(`/rest/v1/${table}?${q}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
   }
+};
+
+// ===== Фото (хранилище Supabase, приватная папка photos/<id пользователя>/) =====
+export const storage = {
+  upload(path, blob) {
+    return call(`/storage/v1/object/photos/${path}`, { method: 'POST', body: blob, raw: true, headers: { 'Content-Type': blob.type || 'image/jpeg', 'x-upsert': 'true', 'cache-control': '31536000' } });
+  },
+  download(path) { return call(`/storage/v1/object/authenticated/photos/${path}`, { blob: true }); },
+  remove(paths) { return call('/storage/v1/object/photos', { method: 'DELETE', body: { prefixes: paths } }); }
 };

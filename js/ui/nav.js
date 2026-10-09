@@ -5,7 +5,7 @@ export const SECTIONS = [
   { id: 'today', label: 'Сегодня', group: 'daily' },
   { id: 'tasks', label: 'Задачи', group: 'daily' },
   { id: 'calendar', label: 'Календарь', group: 'daily', soon: true },
-  { id: 'diary', label: 'Дневник', group: 'daily', soon: true },
+  { id: 'diary', label: 'Дневник', group: 'daily' },
   { id: 'goals', label: 'Цели и привычки', group: 'mine', soon: true },
   { id: 'sport', label: 'Спорт', group: 'mine', soon: true },
   { id: 'billiards', label: 'Бильярд', group: 'mine', soon: true },

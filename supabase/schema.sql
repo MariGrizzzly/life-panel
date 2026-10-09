@@ -85,3 +85,31 @@ begin
     execute format('create policy own_rows on %I for all using (user_id = auth.uid()) with check (user_id = auth.uid())', t);
   end loop;
 end $$;
+
+-- ===== Шаг 2: дневник, фото дня и «Мои тексты» =====
+alter table profiles add column if not exists prefs jsonb not null default '{}'::jsonb;
+
+create table if not exists diary (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  day date not null,
+  text text not null default '',
+  mood int,
+  sleep numeric,
+  energy int,
+  answers jsonb not null default '[]'::jsonb,
+  photo text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, day)
+);
+alter table diary enable row level security;
+drop policy if exists own_rows on diary;
+create policy own_rows on diary for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Приватная папка для фото: каждый видит только свою подпапку
+insert into storage.buckets (id, name, public) values ('photos', 'photos', false) on conflict (id) do nothing;
+drop policy if exists "photos own" on storage.objects;
+create policy "photos own" on storage.objects for all to authenticated
+  using (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text);

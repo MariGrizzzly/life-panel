@@ -25,14 +25,16 @@ export const EVENT_CATS = {
 export const PROJECT_COLORS = ['#5A60C4', '#2F8F83', '#B0802A', '#D9733A', '#C24D6B', '#7A5CB8', '#14629E', '#4B8B3B'];
 export const DEFAULT_TAGS = ['важно', 'созвон', 'ждёт ответа', 'рутина', 'быстро'];
 
-const emptyState = () => ({ version: 2, profile: { name: '' }, projects: [], tags: [], tasks: [], inbox: [], habits: [], habitLog: {}, events: [], hasDemo: false, lastBackup: null, updatedAt: null });
+const emptyState = () => ({ version: 3, profile: { name: '', prefs: {} }, projects: [], tags: [], tasks: [], inbox: [], habits: [], habitLog: {}, events: [], diary: {}, hasDemo: false, lastBackup: null, updatedAt: null });
 
 function normalize(s) {
   const e = emptyState();
   const out = { ...e, ...(s || {}) };
   ['projects', 'tags', 'tasks', 'inbox', 'habits', 'events'].forEach((k) => { if (!Array.isArray(out[k])) out[k] = []; });
   if (!out.habitLog || typeof out.habitLog !== 'object') out.habitLog = {};
+  if (!out.diary || typeof out.diary !== 'object' || Array.isArray(out.diary)) out.diary = {};
   if (!out.profile) out.profile = { name: '' };
+  if (!out.profile.prefs) out.profile.prefs = {};
   return out;
 }
 
@@ -42,7 +44,7 @@ const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); 
 let userId = null;
 let state = emptyState();
 let queue = [];
-export const sync = { status: 'idle', pending: 0, error: '', lastPull: null };
+export const sync = { status: 'idle', pending: 0, error: '', lastPull: null, needsSql: false };
 
 function persist() {
   if (!userId) return;
@@ -74,7 +76,8 @@ const R = {
   inbox: (i) => ({ id: i.id, user_id: userId, text: i.text, created_at: i.createdAt || new Date().toISOString() }),
   tag: (name) => ({ user_id: userId, name }),
   habitDay: (habitId, day) => ({ user_id: userId, habit_id: habitId, day }),
-  profile: (name) => ({ user_id: userId, name })
+  profile: (p) => ({ user_id: userId, name: p.name || '', prefs: p.prefs || {} }),
+  diary: (d) => ({ id: d.id, user_id: userId, day: d.day, text: d.text || '', mood: d.mood || null, sleep: d.sleep === '' || d.sleep === undefined ? null : d.sleep, energy: d.energy || null, answers: d.answers || [], photo: d.photo || null, updated_at: new Date().toISOString() })
 };
 const up = (table, row, conflict) => ({ op: 'up', table, row, conflict });
 const del = (table, match) => ({ op: 'del', table, match });
@@ -82,6 +85,8 @@ const del = (table, match) => ({ op: 'del', table, match });
 function fromRemote(r) {
   const s = emptyState();
   s.profile.name = (r.profiles[0] && r.profiles[0].name) || '';
+  s.profile.prefs = r.profiles[0] && r.profiles[0].prefs ? r.profiles[0].prefs : (state.profile.prefs || {});
+  (r.diary || []).forEach((d) => { s.diary[d.day] = { id: d.id, day: d.day, text: d.text || '', mood: d.mood, sleep: d.sleep, energy: d.energy, answers: d.answers || [], photo: d.photo }; });
   s.projects = r.projects.map((p) => ({ id: p.id, name: p.name, sphere: p.sphere, color: p.color, archived: p.archived }));
   s.tags = r.tags.map((t) => t.name);
   const local = new Map(state.tasks.map((t) => [t.id, t]));
@@ -108,6 +113,7 @@ export async function flush() {
       const o = queue[0];
       try {
         if (o.op === 'up') await db.upsert(o.table, o.row, o.conflict);
+        if (o.op === 'up' && o.table === 'diary' && state.diary[o.row.day]) state.diary[o.row.day].unsynced = false;
         else if (o.op === 'del') await db.remove(o.table, o.match);
         queue.shift(); persist();
       } catch (e) {
@@ -123,14 +129,29 @@ export async function flush() {
   try { return await flushing; } finally { flushing = null; }
 }
 
-const TABLES = ['profiles', 'projects', 'tags', 'tasks', 'inbox', 'habits', 'habit_log', 'events'];
+const TABLES = ['profiles', 'projects', 'tags', 'tasks', 'inbox', 'habits', 'habit_log', 'events', 'diary'];
+// Таблица дневника появляется после запуска SQL — без неё панель всё равно работает
+const OPTIONAL = new Set(['diary']);
 export async function pull() {
   if (!userId) return null;
   await flush();
-  const res = await Promise.all(TABLES.map((t) => db.select(t, t === 'tasks' ? 'select=*&order=created_at.asc' : 'select=*')));
+  sync.needsSql = false;
+  const res = await Promise.all(TABLES.map((t) => db.select(t, t === 'tasks' ? 'select=*&order=created_at.asc' : 'select=*').catch((e) => {
+    if (OPTIONAL.has(t) && !e.offline && e.status !== 401) { sync.needsSql = true; return []; }
+    throw e;
+  })));
   const r = Object.fromEntries(TABLES.map((t, i) => [t, res[i] || []]));
   const empty = !r.projects.length && !r.tasks.length && !r.habits.length && !r.inbox.length && !r.events.length && !r.profiles.length;
-  if (!queue.length) { state = fromRemote(r); persist(); }
+  if (!queue.length) {
+    const prev = state;
+    state = fromRemote(r);
+    // Записи дневника, которые ещё не дошли до базы (например, до создания таблицы), не теряем и досылаем
+    Object.values(prev.diary || {}).forEach((d) => {
+      if (!state.diary[d.day] && d.unsynced) { state.diary[d.day] = d; if (!sync.needsSql) queue.push(up('diary', R.diary(d), 'user_id,day')); }
+    });
+    persist();
+    if (queue.length) scheduleFlush(0);
+  }
   sync.lastPull = Date.now(); sync.status = 'ok'; emit();
   return { empty };
 }
@@ -171,10 +192,12 @@ export function setupFresh({ name, legacy = null, keepDemo = false }) {
     s.tasks = L.tasks.filter(keep).map((t) => ({ ...t, projectId: projIds.has(t.projectId) ? t.projectId : null, demo: undefined }));
     s.inbox = L.inbox.filter(keep).map((i) => ({ ...i, demo: undefined }));
     s.events = L.events.filter(keep).map((e) => ({ ...e, demo: undefined }));
+    s.diary = L.diary || {};
   } else {
     s.tags = [...DEFAULT_TAGS];
   }
-  const ops = [up('profiles', R.profile(s.profile.name))];
+  s.profile.prefs = (legacy && legacy.profile && legacy.profile.prefs) || {};
+  const ops = [up('profiles', R.profile(s.profile))];
   s.projects.forEach((p) => ops.push(up('projects', R.project(p))));
   s.tags.forEach((t) => ops.push(up('tags', R.tag(t), 'user_id,name')));
   s.habits.forEach((h) => ops.push(up('habits', R.habit(h))));
@@ -182,6 +205,7 @@ export function setupFresh({ name, legacy = null, keepDemo = false }) {
   s.tasks.forEach((t) => ops.push(up('tasks', R.task(t))));
   s.inbox.forEach((i) => ops.push(up('inbox', R.inbox(i))));
   s.events.forEach((e) => ops.push(up('events', R.event(e))));
+  Object.values(s.diary).forEach((d) => { if (!d.id) d.id = uid(); ops.push(up('diary', R.diary(d), 'user_id,day')); });
   state = s;
   queue.push(...ops);
   persist(); emit(); scheduleFlush(0);
@@ -238,7 +262,27 @@ export function removeHabit(id) {
   const ops = [];
   store.update((s) => { const h = s.habits.find((x) => x.id === id); if (h) ops.push(up('habits', R.habit({ ...h, archived: true }))); s.habits = s.habits.filter((x) => x.id !== id); }, ops);
 }
-export function setName(name) { store.update((s) => { s.profile.name = name; }, [up('profiles', R.profile(name))]); }
+export function setName(name) { const ops = []; store.update((s) => { s.profile.name = name; ops.push(up('profiles', R.profile(s.profile))); }, ops); }
+export function setPrefs(patch) { const ops = []; store.update((s) => { s.profile.prefs = { ...(s.profile.prefs || {}), ...patch }; ops.push(up('profiles', R.profile(s.profile))); }, ops); }
+
+// ===== Дневник =====
+export function saveDiary(day, patch) {
+  const ops = [];
+  store.update((s) => {
+    const d = s.diary[day] || (s.diary[day] = { id: uid(), day, text: '', mood: null, sleep: null, energy: null, answers: [], photo: null });
+    Object.assign(d, patch, { unsynced: true });
+    ops.push(up('diary', R.diary(d), 'user_id,day'));
+  }, ops);
+}
+const hasEntry = (d) => !!(d && ((d.text || '').trim() || d.mood || (d.answers || []).some((a) => (a.a || '').trim()) || d.photo));
+export const diaryHasEntry = hasEntry;
+export function diaryStreak(today = todayISO()) {
+  let d = hasEntry(state.diary[today]) ? today : addDays(today, -1);
+  let n = 0;
+  while (hasEntry(state.diary[d])) { n++; d = addDays(d, -1); }
+  return n;
+}
+export const currentUserId = () => userId;
 export function addTag(tag) { const ops = []; store.update((s) => { ops.push(...newTagOps(s, [tag])); }, ops); }
 
 export function toggleHabit(habitId, date = todayISO()) {
@@ -268,7 +312,8 @@ export function resetAll() {
     s.events.forEach((e) => ops.push(del('events', { id: e.id })));
     s.projects.forEach((p) => ops.push(del('projects', { id: p.id })));
     Object.entries(s.habitLog).forEach(([day, hs]) => Object.keys(hs).forEach((hid) => ops.push(del('habit_log', { habit_id: hid, day }))));
-    s.tasks = []; s.inbox = []; s.events = []; s.projects = []; s.habitLog = {};
+    Object.values(s.diary).forEach((d) => ops.push(del('diary', { day: d.day })));
+    s.tasks = []; s.inbox = []; s.events = []; s.projects = []; s.habitLog = {}; s.diary = {};
   }, ops);
 }
 

@@ -1,9 +1,10 @@
-import { esc, todayISO, plural, greeting, longDate } from '../util.js';
+import { esc, todayISO, plural, longDate } from '../util.js';
+import { greetingLine } from '../texts.js';
 import { icon, water, WAVE_PATH, WAVE_PATH_SOFT } from '../ui/icons.js';
-import { projectOf, SPHERES, EVENT_CATS, habitStreak, NO_PROJECT } from '../store.js';
+import { projectOf, SPHERES, EVENT_CATS, habitStreak, NO_PROJECT, diaryStreak } from '../store.js';
 import { taskRow } from './shared.js';
 
-export function title(s) { return [greeting(s.profile.name), longDate(todayISO())]; }
+export function title(s) { return [greetingLine(s), longDate(todayISO())]; }
 
 export function render(s, ui) {
   const today = todayISO();
@@ -27,9 +28,17 @@ export function render(s, ui) {
   });
 
   const nextEvent = events.find((e) => e.time && e.time >= new Date().toTimeString().slice(0, 5));
-  const summary = total
-    ? `Сегодня ${total} ${plural(total, ['задача', 'задачи', 'задач'])}${events.length ? ` и ${events.length} ${plural(events.length, ['событие', 'события', 'событий'])}` : ''}.${nextEvent ? ` Дальше — «${esc(nextEvent.title)}» в ${esc(nextEvent.time)}.` : ''}${overdue ? ` Просрочено: ${overdue}.` : ''}`
-    : 'На сегодня задач пока нет — можно добавить или спокойно отдохнуть.';
+  const left = total - done;
+  const evPart = events.length ? ` и ${events.length} ${plural(events.length, ['событие', 'события', 'событий'])}` : '';
+  let summary;
+  if (!total) summary = events.length ? `Задач на сегодня нет, но в календаре ${events.length} ${plural(events.length, ['событие', 'события', 'событий'])}.` : 'На сегодня чисто. Добавь задачу или просто поплавай в тишине.';
+  else if (!left) summary = 'Всё сделано! Сфера полная — можно выдыхать.';
+  else if (!done) summary = `Впереди ${total} ${plural(total, ['задача', 'задачи', 'задач'])}${evPart}. Начнём с маленькой?`;
+  else summary = `Осталось ${left} из ${total}${evPart}. Хороший темп.`;
+  if (nextEvent) summary += ` Дальше — «${esc(nextEvent.title)}» в ${esc(nextEvent.time)}.`;
+  if (overdue) summary += ` Из прошлых дней хвостов: ${overdue}.`;
+  const streak = diaryStreak();
+  const wroteToday = !!(s.diary && s.diary[today] && (s.diary[today].text || s.diary[today].mood || (s.diary[today].answers || []).length));
 
   const wDoneN = s.tasks.filter((t) => t.date === today && t.status === 'done' && projectOf(t).sphere === 'work').length;
   const wDoingN = s.tasks.filter((t) => t.status === 'doing' && projectOf(t).sphere === 'work').length;
@@ -70,10 +79,9 @@ export function render(s, ui) {
           <button class="btn glass" data-action="add-event">${icon('calendar', 18)}Событие</button>
           <a class="btn glass" href="#diary">${icon('diary', 18)}Дневник</a>
         </div>
-        <form class="quick" data-action="quick-inbox" style="display:flex;gap:8px;flex-wrap:wrap">
-          <label for="qc" class="sr">Мысль или идея во входящие</label>
-          <input id="qc" name="text" class="input" style="flex:1 1 280px;width:auto" placeholder="Мысль, идея, ссылка — во входящие" autocomplete="off">
-          <button class="btn glass" type="submit">Во входящие</button>
+        <form class="quick" data-action="quick-inbox">
+          <label for="qc" class="sr">Улов: мысль, идея или ссылка на потом</label>
+          <input id="qc" name="text" class="input" placeholder="Поймала мысль? Закинь в улов и нажми Enter" autocomplete="off" enterkeyhint="send">
         </form>
       </div>
       <div class="orbwrap" style="flex:none;display:flex;align-items:center;gap:18px">
@@ -112,11 +120,12 @@ export function render(s, ui) {
         const dn = items.filter((t) => t.status === 'done').length;
         const sp = SPHERES[p.sphere];
         return `<div class="pcard lift" data-key="pc-${esc(p.id || 'none')}">
-          <div style="display:flex;align-items:center;gap:8px"><span class="pdot" style="background:${esc(p.color)}"></span><span style="flex:1;font-size:15px;font-weight:600">${esc(p.name)}</span><span class="chip" style="background:${sp.bg};color:${sp.fg}">${sp.label}</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><span class="pdot" style="background:${esc(p.color)}"></span><span style="flex:1;font-size:15px;font-weight:600">${esc(p.name)}</span><span class="chip" style="background:${sp.bg};color:${sp.fg}">${sp.label}</span><button class="iconbtn" data-action="quick-open" data-project="${esc(p.id || 'none')}" aria-label="Добавить задачу в «${esc(p.name)}»" title="Добавить задачу">${icon('plus', 18, 2.2)}</button></div>
           <div style="display:flex;align-items:center;gap:8px;margin:6px 0 2px"><div class="track" style="flex:1;height:5px"><div class="liquid" style="width:${Math.round((dn / items.length) * 100)}%"></div></div><span class="muted" style="font-size:12px;font-weight:600">${dn}/${items.length}</span></div>
           ${items.map((t) => taskRow(t, { meta: t.time })).join('')}
+          ${quickAddForm(ui, p.id || 'none', today)}
         </div>`;
-      }).join('')}</div>` : `<div class="empty">${total ? 'В этом фильтре на сегодня задач нет' : 'Задач на сегодня нет. Добавь первую — кнопка «Задача» выше.'}</div>`}
+      }).join('')}</div>` : `<div class="empty">${total ? 'В этом фильтре на сегодня пусто' : 'На сегодня чисто. Нажми «Задача», когда что-то всплывёт.'}</div>`}
     </section>
 
     <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:20px">
@@ -128,14 +137,25 @@ export function render(s, ui) {
         <div aria-hidden="true" data-skip-morph><span class="bub" style="width:7px;height:7px;left:85%;bottom:10px;animation-delay:.5s"></span><span class="bub" style="width:5px;height:5px;left:92%;bottom:6px;animation-delay:2.5s"></span></div>
         <div style="position:relative;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h2 class="h2" style="color:#FFFFFF">Закрыть день</h2></div>
         <button data-action="go" data-to="tasks" data-view="report"><span style="flex:1"><span style="font-size:14px;font-weight:600">Отчёт по работе</span><small>${wDoneN} ${plural(wDoneN, ['задача готова', 'задачи готовы', 'задач готово'])}, ${wDoingN} в работе</small></span><span aria-hidden="true">→</span></button>
-        <button data-action="go" data-to="diary"><span style="flex:1"><span style="font-size:14px;font-weight:600">Дневник и настроение</span><small>появится на следующем шаге</small></span><span aria-hidden="true">→</span></button>
+        <button data-action="go" data-to="diary"><span style="flex:1"><span style="font-size:14px;font-weight:600">${wroteToday ? 'Дневник: запись есть' : 'Пара строк в дневник'}</span><small>${streak ? `${streak} ${plural(streak, ['день', 'дня', 'дней'])} подряд${wroteToday ? '' : ' — не прерывай серию'}` : 'настроение, мысли и фото дня'}</small></span><span aria-hidden="true">→</span></button>
       </section>
     </div>
   </div>
 
   <section class="card" style="display:flex;flex-direction:column;gap:10px">
     <h2 class="h2">Привычки</h2>
-    ${s.habits.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${habitsHtml}</div>` : '<div class="muted">Привычек пока нет — добавь в настройках.</div>'}
+    ${s.habits.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${habitsHtml}</div>` : '<div class="muted">Привычек пока нет. Добавить можно в Настройках.</div>'}
   </section>
 </div>`;
+}
+
+// Строка быстрого добавления внутри карточки проекта
+export function quickAddForm(ui, key, date) {
+  if (ui.quickAdd !== key) return '';
+  return `<form class="quick-add fade" data-action="quick-task" data-project="${esc(key)}" data-date="${esc(date || '')}" data-key="qa-${esc(key)}">
+    <label for="qa-${esc(key)}" class="sr">Новая задача</label>
+    <input id="qa-${esc(key)}" name="title" placeholder="Новая задача — Enter" autocomplete="off" enterkeyhint="done" data-autofocus>
+    <button type="button" class="iconbtn" data-action="quick-more" aria-label="Открыть полную форму" title="Дата, время, теги">${icon('menu', 18)}</button>
+    <button type="button" class="iconbtn" data-action="quick-close" aria-label="Закрыть">${icon('close', 16, 2)}</button>
+  </form>`;
 }
