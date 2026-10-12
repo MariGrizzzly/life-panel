@@ -2,7 +2,7 @@
 import { esc, todayISO, plural, shortDate, parseISO } from '../util.js';
 import { icon } from '../ui/icons.js';
 import { sync } from '../store.js';
-import { sportStreak, WEEK_GOAL, exerciseProgress, fmtKg, sparkline } from '../sport.js';
+import { sportStreak, WEEK_GOAL, exerciseProgress, fmtKg, sparkline, formatSets } from '../sport.js';
 import { heroDeco, waterOrb } from './shared.js';
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -18,10 +18,9 @@ export function title(s) {
 export const durText = (m) => { if (!m) return ''; const h = Math.floor(m / 60), r = m % 60; return h ? `${h} ч${r ? ` ${r} мин` : ''}` : `${r} мин`; };
 
 export function exSummary(e) {
-  const sr = e.sets && e.reps ? `${e.sets}×${e.reps}` : e.sets ? `${e.sets} подх.` : '';
-  const wt = e.weight ? `${fmtKg(e.weight)} кг` : '';
+  const txt = formatSets(e);
   const arrow = e.delta === 'up' ? '<b class="up">↑</b>' : e.delta === 'down' ? '<b class="down">↓</b>' : '';
-  return `<span class="exs">${esc(e.name)}${sr || wt ? ` <span class="muted">${esc([sr, wt].filter(Boolean).join(' · '))}</span>` : ''}${arrow}</span>`;
+  return `<span class="exs">${esc(e.name)}${txt ? ` <span class="muted">${esc(txt)}</span>` : ''}${arrow}${e.note ? ` <span class="muted" style="font-style:italic">(${esc(e.note)})</span>` : ''}</span>`;
 }
 
 export function render(s, ui) {

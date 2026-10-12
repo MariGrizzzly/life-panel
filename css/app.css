@@ -372,7 +372,7 @@ a { color: var(--accent); }
 .hmeta { display: flex; gap: 6px; flex-wrap: wrap; }
 .hmeta:empty { display: none; }
 .hex { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
-.exs { white-space: nowrap; }
+.exs { white-space: normal; }
 .exs b { margin-left: 3px; }
 .hnote { font-size: 13px; }
 .exlist { display: flex; flex-direction: column; gap: 10px; }
@@ -411,3 +411,29 @@ a { color: var(--accent); }
 .lc-x { position: absolute; top: 8px; transform: translateX(-50%); font-size: 11px; color: #7C93A6; white-space: nowrap; }
 .lc-x.first { transform: none; }
 .lc-x.last { transform: translateX(-100%); }
+/* Карточка упражнения с подходами */
+.excard { border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.exhead { display: flex; gap: 8px; align-items: center; }
+.exhead .exname { flex: 1; }
+.exhead .exname .input { font-weight: 600; background: #FFFFFF; }
+.sets { display: flex; flex-direction: column; gap: 6px; max-width: 440px; }
+.sethead, .setrow { display: grid; grid-template-columns: 30px minmax(0, 1fr) 14px minmax(0, 1fr) 34px 34px; gap: 6px; align-items: center; }
+.sethead span { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding-left: 4px; }
+.setrow .input { min-height: 40px; padding: 0 10px; background: #FFFFFF; text-align: center; }
+.setno { width: 26px; height: 26px; border-radius: 50%; background: var(--tint); color: var(--deep); font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.setrow.dropstep .setno { background: transparent; color: var(--accent); font-size: 15px; }
+.setrow.dropstep .input { border-style: dashed; }
+.setx { color: var(--muted); text-align: center; font-size: 13px; }
+.setrow .iconbtn { width: 34px; height: 34px; font-size: 16px; }
+.exfoot { display: flex; gap: 16px; padding-left: 4px; }
+@media (max-width: 640px) {
+  .exhead { flex-wrap: wrap; }
+  .exhead .exname { flex-basis: 100%; }
+  .exhead .exbtns { width: 100%; justify-content: space-between; }
+}
+.chip.rep { background: #E6F2FB; color: #14629E; }
+.repeat { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.repdays { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.repday { width: 38px; height: 34px; border-radius: 10px; border: 1px solid #C9DCEB; background: #FFFFFF; color: var(--ink-2); font-size: 13px; font-weight: 600; cursor: pointer; }
+.repday.on { background: linear-gradient(180deg, #2E8FD6, #14629E); border-color: #14629E; color: #FFFFFF; }
+.repquick { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

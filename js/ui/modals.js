@@ -86,6 +86,7 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
       <div class="seg" role="radiogroup" aria-label="Сфера"><button type="button" class="on" data-np-sphere="work" role="radio" aria-checked="true">Работа</button><button type="button" data-np-sphere="personal" role="radio" aria-checked="false">Личное</button></div>
       <button type="button" class="btn small" data-np-create>Создать</button>
     </div>
+    <div class="field"><span class="label" id="rep-lbl">Повтор</span><div class="repeat" data-repeat role="group" aria-labelledby="rep-lbl"></div></div>
     <div class="field"><span class="label" id="tags-lbl">Теги</span><div data-tags aria-labelledby="tags-lbl"></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn" type="submit">${t ? 'Сохранить' : 'Добавить задачу'}</button>
@@ -105,6 +106,24 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
     const stHost = m.querySelector('[data-status]');
     const stF = stHost ? selectField(stHost, { value: data.status, id: 'f-status', name: 'status', groups: () => STATUS_GROUPS }) : null;
     cleanup = () => { [tagsF, dateF, dlF, projF, stF].forEach((f) => f && f.destroy()); };
+    // Повтор: дни недели кнопками + быстрые варианты
+    let rep = Array.isArray(data.repeat) ? [...data.repeat] : [];
+    const repHost = m.querySelector('[data-repeat]');
+    const WDN = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+    const PRESETS = [['Будни', [1, 2, 3, 4, 5]], ['Каждый день', [1, 2, 3, 4, 5, 6, 7]]];
+    const same = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+    const drawRep = () => {
+      repHost.innerHTML = `<div class="repdays">${WDN.map((n, i) => `<button type="button" class="repday${rep.includes(i + 1) ? ' on' : ''}" data-day="${i + 1}" aria-pressed="${rep.includes(i + 1)}">${n}</button>`).join('')}</div>
+        <div class="repquick">${PRESETS.map(([l, d]) => `<button type="button" class="qchip${same(rep, d) ? ' on' : ''}" data-preset="${d.join(',')}">${l}</button>`).join('')}${rep.length ? '<button type="button" class="link" data-preset="">Не повторять</button>' : '<span class="muted" style="font-size:12px">не повторяется</span>'}</div>`;
+    };
+    drawRep();
+    repHost.addEventListener('click', (e) => {
+      const d = e.target.closest('[data-day]'); const p = e.target.closest('[data-preset]');
+      if (d) { const n = Number(d.dataset.day); rep = rep.includes(n) ? rep.filter((x) => x !== n) : [...rep, n].sort(); }
+      else if (p) rep = p.dataset.preset ? p.dataset.preset.split(',').map(Number) : [];
+      else return;
+      drawRep();
+    });
     const np = m.querySelector('[data-newproj]');
     let npSphere = 'work';
     projHost.addEventListener('pick', (e) => {
@@ -135,12 +154,13 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
       let pid = projF.get();
       if (!np.hidden && m.querySelector('#np-name').value.trim()) pid = createProject();
       const payload = { title: titleV, projectId: pid || null, date: dateF.get() || null, deadline: dlF.get() || '', tags: tagsF.get() };
+      if (rep.length || (t && t.repeat && t.repeat.length)) payload.repeat = rep;
       if (t) updateTask(t.id, { ...payload, status: stF ? stF.get() : t.status });
       else { addTask(payload); if (fromInbox) removeInbox(fromInbox); }
       closeModal();
     });
     const del = m.querySelector('[data-delete]');
-    if (del) del.addEventListener('click', async () => { if (await ask('Удалить задачу?', { ok: 'Удалить', danger: true })) { deleteTask(t.id); closeModal(); } });
+    if (del) del.addEventListener('click', async () => { if (await ask(t.repeat && t.repeat.length ? 'Удалить повторяющуюся задачу? Больше она появляться не будет, а уже выполненные останутся в истории.' : 'Удалить задачу?', { ok: 'Удалить', danger: true })) { deleteTask(t.id); closeModal(); } });
   });
 }
 

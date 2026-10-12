@@ -21,7 +21,7 @@ export function splash(x, y, text = '') {
     for (let i = 0; i < n; i++) {
       const a = delay ? R(0, Math.PI * 2) : R(-Math.PI * 0.95, -Math.PI * 0.05);
       const v = delay ? R(2.5, 7.5) : R(5, 13);
-      drops.push({ x: bx, y: by, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: R(1.6, 4.6), col: COLORS[i % COLORS.length], t: -delay / 16.7, life: R(55, 95) });
+      drops.push({ x: bx, y: by, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: R(1.6, 4.6), col: COLORS[i % COLORS.length], t: -delay / 16.7, life: R(42, 72) });
     }
   });
   const rings = bursts.map(([bx, by, delay]) => ({ x: bx, y: by, t: -delay / 16.7 }));
@@ -49,7 +49,7 @@ export function splash(x, y, text = '') {
       g.beginPath(); g.arc(d.r * 0.3, -d.r * 0.35, d.r * 0.35, 0, Math.PI * 2); g.fillStyle = 'rgba(255,255,255,.85)'; g.fill();
       g.restore();
     });
-    if (alive && frame < 260) requestAnimationFrame(tick); else c.remove();
+    if (alive && frame < 170) requestAnimationFrame(tick); else c.remove();
   };
   requestAnimationFrame(tick);
 }

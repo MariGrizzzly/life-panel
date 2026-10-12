@@ -4,7 +4,7 @@ import { dateField } from './fields.js';
 import { icon } from './icons.js';
 import { open, closeModal, setCleanup, ask } from './modals.js';
 import { store, saveWorkout, deleteWorkout, saveBilliard, deleteBilliard } from '../store.js';
-import { exerciseNames, lastExercise, weightStep, fmtKg, parseNum, drillNames, drillPct, sessionPct, pctText } from '../sport.js';
+import { exerciseNames, lastExercise, weightStep, fmtKg, parseNum, normalizeEx, topWeight, formatSets, drillNames, drillPct, sessionPct, pctText } from '../sport.js';
 import { splash } from './fx.js';
 
 const CHEERS = [
@@ -45,12 +45,23 @@ function nameSuggest(input, all, onPick) {
 }
 
 // ===== Спорт =====
+// Каждое упражнение — карточка с подходами. У каждого подхода свой вес и повторы,
+// в подход можно добавить ступени дроп-сета (снизила вес, не отдыхая).
+const emptySet = () => ({ key: uid(), w: '', r: '', d: [] });
+const toEdit = (e) => {
+  const n = normalizeEx(e);
+  return { key: uid(), name: n.name || '', note: n.note || '', showNote: !!n.note, delta: n.delta || null,
+    sets: (n.sets || []).map((x) => ({ key: uid(), w: fmtKg(x.w), r: x.r ?? '', d: (x.d || []).map((y) => ({ key: uid(), w: fmtKg(y.w), r: y.r ?? '' })) })) };
+};
+const parseReps = (v) => { const t = String(v ?? '').trim().replace(/\s+/g, ''); if (!t) return null; const n = Number(t.replace(',', '.')); return isNaN(n) ? t.replace(/[–—]/g, '-') : n; };
+
 export function workoutModal({ id = null } = {}) {
   const s = store.get();
   const w0 = id ? s.workouts.find((x) => x.id === id) : null;
   const w = w0 ? JSON.parse(JSON.stringify(w0)) : { id: uid(), day: todayISO(), duration: 60, coach: false, exercises: [], note: '' };
-  let rows = (w.exercises || []).map((e) => ({ ...e, key: uid() }));
-  if (!rows.length) rows.push({ key: uid(), name: '', sets: '', reps: '', weight: '', delta: null });
+  let exs = (w.exercises || []).map(toEdit);
+  const blankEx = () => ({ key: uid(), name: '', note: '', showNote: false, delta: null, sets: [emptySet()] });
+  if (!exs.length) exs.push(blankEx());
   const history = () => store.get().workouts;
   const prevOf = (name) => (name ? lastExercise(history(), name, { exceptId: w.id, beforeDay: w.day }) : null);
 
@@ -65,7 +76,7 @@ export function workoutModal({ id = null } = {}) {
     </div>
     <div class="field"><span class="label">Упражнения</span><div class="exlist" data-rows></div>
       <div><button type="button" class="btn ghost small" data-add-row>${icon('plus', 16, 2.2)}Упражнение</button></div></div>
-    <div class="field"><label class="label" for="w-note">Заметка</label><textarea id="w-note" class="input" rows="2" placeholder="Как прошло? Что болело, что порадовало">${esc(w.note || '')}</textarea></div>
+    <div class="field"><label class="label" for="w-note">Заметка к тренировке</label><textarea id="w-note" class="input" rows="2" placeholder="Как прошло? Что болело, что порадовало">${esc(w.note || '')}</textarea></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn" type="submit">${w0 ? 'Сохранить' : 'Записать тренировку'}</button>
       <button class="btn ghost" type="button" data-close>Отмена</button>
@@ -74,10 +85,10 @@ export function workoutModal({ id = null } = {}) {
   </form>`;
 
   open(w0 ? 'Тренировка' : 'Новая тренировка', body, (m) => {
-    m.style.maxWidth = '780px';
+    m.style.maxWidth = '720px';
     const dateF = dateField(m.querySelector('[data-date]'), { value: w.day, id: 'w-date', name: 'day', required: true });
     setCleanup(() => dateF.destroy());
-    m.querySelector('[data-date]').addEventListener('pick', () => { w.day = dateF.get() || todayISO(); rows.forEach(updateHint); });
+    m.querySelector('[data-date]').addEventListener('pick', () => { w.day = dateF.get() || todayISO(); exs.forEach(updateHint); });
     const dur = m.querySelector('#w-dur');
     m.querySelectorAll('[data-dur]').forEach((b) => b.addEventListener('click', () => { dur.value = b.dataset.dur; }));
     const coachBtns = m.querySelectorAll('[data-coach]');
@@ -86,89 +97,148 @@ export function workoutModal({ id = null } = {}) {
     coachBtns.forEach((b) => b.addEventListener('click', () => setCoach(b.dataset.coach === '1')));
 
     const list = m.querySelector('[data-rows]');
-    const rowEl = (r) => list.querySelector(`[data-row="${r.key}"]`);
-    const readRow = (r) => {
-      const el = rowEl(r); if (!el) return;
-      r.name = el.querySelector('[data-f=name]').value.trim();
-      r.sets = el.querySelector('[data-f=sets]').value.trim();
-      r.reps = el.querySelector('[data-f=reps]').value.trim();
-      r.weight = el.querySelector('[data-f=weight]').value.trim();
-    };
-    function updateHint(r) {
-      const el = rowEl(r); if (!el) return;
-      readRow(r);
-      const prev = prevOf(r.name);
-      const hint = el.querySelector('[data-hint]');
-      if (!r.name) { hint.innerHTML = ''; return; }
-      if (!prev) { hint.innerHTML = '<span class="muted">Новое упражнение — запомню его</span>'; return; }
-      const cur = parseNum(r.weight), pw = parseNum(prev.weight);
-      let ch = '';
-      if (cur !== null && pw !== null && cur !== pw) ch = cur > pw ? ` <b class="up">↑ +${fmtKg(cur - pw)} кг</b>` : ` <b class="down">↓ −${fmtKg(pw - cur)} кг</b>`;
-      hint.innerHTML = `<span class="muted">В прошлый раз (${esc(shortDate(prev.day))}): ${esc(prev.sets || '?')}×${esc(prev.reps || '?')}${prev.weight !== '' && prev.weight !== null && prev.weight !== undefined ? ` · ${esc(fmtKg(prev.weight))} кг` : ''}</span>${ch}`;
-    }
-    const fill = (r) => {
-      readRow(r);
-      const prev = prevOf(r.name); if (!prev) { updateHint(r); return; }
-      const el = rowEl(r);
-      [['sets', prev.sets], ['reps', prev.reps], ['weight', fmtKg(prev.weight)]].forEach(([f, v]) => { const i = el.querySelector(`[data-f=${f}]`); if (!i.value && v !== undefined && v !== null) i.value = v; });
-      updateHint(r);
-    };
-    const draw = () => {
-      rows.forEach(readRow);
-      list.innerHTML = rows.map((r) => `<div class="exrow" data-row="${r.key}">
-        <div class="exname"><input class="input" data-f="name" placeholder="Упражнение, например «Присед»" value="${esc(r.name)}" autocomplete="off" aria-label="Упражнение"></div>
-        <label class="exnum"><input class="input num" data-f="sets" inputmode="numeric" value="${esc(r.sets ?? '')}" placeholder="3"><span>подх.</span></label>
-        <label class="exnum"><input class="input num" data-f="reps" inputmode="numeric" value="${esc(r.reps ?? '')}" placeholder="10"><span>повт.</span></label>
-        <label class="exnum"><input class="input num" data-f="weight" inputmode="decimal" value="${esc(fmtKg(r.weight))}" placeholder="0"><span>кг</span></label>
-        <div class="exbtns">
-          <button type="button" class="iconbtn" data-down title="Уменьшить вес" aria-label="Уменьшить вес">−</button>
-          <button type="button" class="btn small raise" data-up>↑ Поднять вес</button>
-          <button type="button" class="iconbtn" data-del title="Убрать упражнение" aria-label="Убрать упражнение">${icon('close', 15, 2)}</button>
-        </div>
-        <div class="exhint" data-hint></div>
-      </div>`).join('');
-      rows.forEach((r) => {
-        const el = rowEl(r);
-        const nameI = el.querySelector('[data-f=name]');
-        nameSuggest(nameI, () => exerciseNames(history()), () => fill(r));
-        nameI.addEventListener('change', () => fill(r));
-        el.querySelector('[data-f=weight]').addEventListener('input', () => updateHint(r));
-        const shift = (dir, btn) => {
-          readRow(r);
-          const prev = prevOf(r.name);
-          const base = parseNum(r.weight) ?? (prev ? parseNum(prev.weight) : null) ?? 0;
-          const step = weightStep(base);
-          const nv = Math.max(0, Math.round((base + dir * step) * 100) / 100);
-          el.querySelector('[data-f=weight]').value = fmtKg(nv);
-          r.weight = fmtKg(nv); r.delta = dir > 0 ? 'up' : 'down';
-          updateHint(r);
-          if (dir > 0) {
-            const b = btn.getBoundingClientRect();
-            splash(b.left + b.width / 2, b.top + b.height / 2, CHEERS[Math.floor(Math.random() * CHEERS.length)](fmtKg(step), fmtKg(nv)));
-          }
-        };
-        el.querySelector('[data-up]').addEventListener('click', (e) => shift(1, e.currentTarget));
-        el.querySelector('[data-down]').addEventListener('click', (e) => shift(-1, e.currentTarget));
-        el.querySelector('[data-del]').addEventListener('click', () => { rows.forEach(readRow); rows = rows.filter((x) => x !== r); if (!rows.length) rows.push({ key: uid(), name: '', sets: '', reps: '', weight: '', delta: null }); draw(); });
-        updateHint(r);
+    const cardEl = (ex) => list.querySelector(`[data-ex="${ex.key}"]`);
+    const exOf = (el) => exs.find((x) => x.key === el.closest('[data-ex]').dataset.ex);
+    const readEx = (ex) => {
+      const el = cardEl(ex); if (!el) return;
+      ex.name = el.querySelector('[data-f=name]').value.trim();
+      const n = el.querySelector('[data-f=note]'); if (n) ex.note = n.value.trim();
+      ex.sets.forEach((st) => {
+        const r = el.querySelector(`[data-set="${st.key}"]`); if (!r) return;
+        st.w = r.querySelector('[data-f=w]').value.trim(); st.r = r.querySelector('[data-f=r]').value.trim();
+        st.d.forEach((dd) => { const q = el.querySelector(`[data-drop="${dd.key}"]`); if (q) { dd.w = q.querySelector('[data-f=w]').value.trim(); dd.r = q.querySelector('[data-f=r]').value.trim(); } });
       });
     };
+    const readAll = () => exs.forEach(readEx);
+    const editTop = (ex) => { let mx = null; ex.sets.forEach((st) => [st, ...st.d].forEach((x) => { const v = parseNum(x.w); if (v !== null && (mx === null || v > mx)) mx = v; })); return mx; };
+    const allEmpty = (ex) => ex.sets.every((st) => !st.w && !st.r && !st.d.length);
+
+    function updateHint(ex) {
+      const el = cardEl(ex); if (!el) return;
+      readEx(ex);
+      const hint = el.querySelector('[data-hint]');
+      if (!ex.name) { hint.innerHTML = ''; return; }
+      const prev = prevOf(ex.name);
+      if (!prev) { hint.innerHTML = '<span class="muted">Новое упражнение — запомню его</span>'; return; }
+      const cur = editTop(ex), pw = topWeight(prev);
+      let ch = '';
+      if (cur !== null && pw !== null && cur !== pw) ch = cur > pw ? ` <b class="up">↑ +${fmtKg(cur - pw)} кг</b>` : ` <b class="down">↓ −${fmtKg(pw - cur)} кг</b>`;
+      hint.innerHTML = `<span class="muted">В прошлый раз (${esc(shortDate(prev.day))}): ${esc(formatSets(prev) || 'без подходов')}</span>${ch}`;
+    }
+    const setRow = (st, i) => `<div class="setrow" data-set="${st.key}">
+        <span class="setno">${i + 1}</span>
+        <input class="input num" data-f="w" inputmode="decimal" value="${esc(st.w)}" placeholder="—" aria-label="Вес, подход ${i + 1}">
+        <span class="setx">×</span>
+        <input class="input num" data-f="r" inputmode="numeric" value="${esc(st.r)}" placeholder="—" aria-label="Повторы, подход ${i + 1}">
+        <button type="button" class="iconbtn" data-act="add-drop" title="Дроп-сет: снизить вес в этом же подходе" aria-label="Добавить ступень дроп-сета">↘</button>
+        <button type="button" class="iconbtn" data-act="del-set" aria-label="Убрать подход">${icon('close', 14, 2)}</button>
+      </div>${st.d.map((dd) => `<div class="setrow dropstep" data-drop="${dd.key}" data-parent="${st.key}">
+        <span class="setno" title="Ступень дроп-сета">↳</span>
+        <input class="input num" data-f="w" inputmode="decimal" value="${esc(dd.w)}" placeholder="—" aria-label="Вес, ступень">
+        <span class="setx">×</span>
+        <input class="input num" data-f="r" inputmode="numeric" value="${esc(dd.r)}" placeholder="—" aria-label="Повторы, ступень">
+        <span></span>
+        <button type="button" class="iconbtn" data-act="del-drop" aria-label="Убрать ступень">${icon('close', 14, 2)}</button>
+      </div>`).join('')}`;
+    const cardInner = (ex) => `
+      <div class="exhead">
+        <div class="exname"><input class="input" data-f="name" placeholder="Упражнение, например «Ягодичный мостик»" value="${esc(ex.name)}" autocomplete="off" aria-label="Упражнение"></div>
+        <div class="exbtns">
+          <button type="button" class="iconbtn" data-act="down" title="Снизить вес" aria-label="Снизить вес">−</button>
+          <button type="button" class="btn small raise" data-act="up">↑ Поднять вес</button>
+          <button type="button" class="iconbtn" data-act="del-ex" title="Убрать упражнение" aria-label="Убрать упражнение">${icon('close', 15, 2)}</button>
+        </div>
+      </div>
+      <div class="exhint" data-hint></div>
+      <div class="sets">
+        <div class="sethead"><span></span><span>кг</span><span></span><span>повторы</span></div>
+        ${ex.sets.map(setRow).join('')}
+      </div>
+      ${ex.showNote ? `<input class="input" data-f="note" value="${esc(ex.note)}" placeholder="Заметка к упражнению: тренажёр, ощущения, техника" autocomplete="off">` : ''}
+      <div class="exfoot"><button type="button" class="link" data-act="add-set">+ Подход</button>${ex.showNote ? '' : '<button type="button" class="link" data-act="note">+ Заметка</button>'}</div>`;
+    const bindCard = (ex) => {
+      const el = cardEl(ex);
+      const nameI = el.querySelector('[data-f=name]');
+      nameSuggest(nameI, () => exerciseNames(history()), () => fill(ex));
+      nameI.addEventListener('change', () => fill(ex));
+      updateHint(ex);
+    };
+    const drawCard = (ex) => { readEx(ex); cardEl(ex).innerHTML = cardInner(ex); bindCard(ex); };
+    const draw = () => {
+      readAll();
+      list.innerHTML = exs.map((ex) => `<div class="excard" data-ex="${ex.key}">${cardInner(ex)}</div>`).join('');
+      exs.forEach(bindCard);
+    };
+    // Выбрала упражнение — подставляем подходы с прошлого раза
+    const fill = (ex) => {
+      readEx(ex);
+      const prev = prevOf(ex.name);
+      if (prev && allEmpty(ex) && (prev.sets || []).length) {
+        ex.sets = toEdit(prev).sets;
+        drawCard(ex);
+      } else updateHint(ex);
+    };
+    const shift = (ex, dir, btn) => {
+      readEx(ex);
+      const prev = prevOf(ex.name);
+      if (editTop(ex) === null && prev && topWeight(prev) !== null) ex.sets = toEdit(prev).sets;
+      const top = editTop(ex);
+      if (top === null) { const i = cardEl(ex).querySelector('[data-f=w]'); if (i) i.focus(); return; }
+      const step = weightStep(top);
+      ex.sets.forEach((st) => [st, ...st.d].forEach((x) => { const v = parseNum(x.w); if (v !== null) x.w = fmtKg(Math.max(0, Math.round((v + dir * step) * 100) / 100)); }));
+      ex.delta = dir > 0 ? 'up' : 'down';
+      cardEl(ex).innerHTML = cardInner(ex); bindCard(ex);
+      if (dir > 0) {
+        const b = cardEl(ex).querySelector('[data-act=up]').getBoundingClientRect();
+        splash(b.left + b.width / 2, b.top + b.height / 2, CHEERS[Math.floor(Math.random() * CHEERS.length)](fmtKg(step), fmtKg(editTop(ex))));
+      }
+    };
+    list.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      const ex = exOf(b); const act = b.dataset.act;
+      readEx(ex);
+      if (act === 'up' || act === 'down') { shift(ex, act === 'up' ? 1 : -1, b); return; }
+      if (act === 'del-ex') { readAll(); exs = exs.filter((x) => x !== ex); if (!exs.length) exs.push(blankEx()); draw(); return; }
+      if (act === 'add-set') {
+        const last = ex.sets[ex.sets.length - 1];
+        ex.sets.push(last ? { key: uid(), w: last.w, r: last.r, d: [] } : emptySet());
+        drawCard(ex);
+        const rows = cardEl(ex).querySelectorAll('.setrow:not(.dropstep) [data-f=w]'); rows[rows.length - 1].focus();
+        return;
+      }
+      if (act === 'note') { ex.showNote = true; drawCard(ex); cardEl(ex).querySelector('[data-f=note]').focus(); return; }
+      const rowKey = b.closest('[data-set]') ? b.closest('[data-set]').dataset.set : b.closest('[data-drop]').dataset.parent;
+      const st = ex.sets.find((x) => x.key === rowKey);
+      if (act === 'del-set') { ex.sets = ex.sets.filter((x) => x !== st); if (!ex.sets.length) ex.sets.push(emptySet()); drawCard(ex); }
+      if (act === 'add-drop') {
+        const base = st.d.length ? st.d[st.d.length - 1] : st;
+        const v = parseNum(base.w);
+        const dd = { key: uid(), w: v !== null ? fmtKg(Math.max(0, v - weightStep(v) * 2)) : '', r: '' };
+        st.d.push(dd); drawCard(ex);
+        cardEl(ex).querySelector(`[data-drop="${dd.key}"] [data-f=r]`).focus();
+      }
+      if (act === 'del-drop') { const dk = b.closest('[data-drop]').dataset.drop; st.d = st.d.filter((x) => x.key !== dk); drawCard(ex); }
+    });
+    list.addEventListener('input', (e) => { if (e.target.dataset.f === 'w') updateHint(exOf(e.target)); });
     draw();
     m.querySelector('[data-add-row]').addEventListener('click', () => {
-      rows.forEach(readRow);
-      rows.push({ key: uid(), name: '', sets: '', reps: '', weight: '', delta: null });
-      draw();
-      rowEl(rows[rows.length - 1]).querySelector('[data-f=name]').focus();
+      readAll();
+      const ex = blankEx(); exs.push(ex);
+      list.insertAdjacentHTML('beforeend', `<div class="excard" data-ex="${ex.key}">${cardInner(ex)}</div>`);
+      bindCard(ex);
+      cardEl(ex).querySelector('[data-f=name]').focus();
     });
 
     m.querySelector('[data-form]').addEventListener('submit', (e) => {
       e.preventDefault();
-      rows.forEach(readRow);
-      const exercises = rows.filter((r) => r.name).map((r) => {
-        const prev = prevOf(r.name);
-        const wv = parseNum(r.weight), pw = prev ? parseNum(prev.weight) : null;
-        const delta = wv !== null && pw !== null && wv !== pw ? (wv > pw ? 'up' : 'down') : null;
-        return { name: r.name, sets: parseNum(r.sets), reps: parseNum(r.reps), weight: wv, delta };
+      readAll();
+      const exercises = exs.filter((ex) => ex.name).map((ex) => {
+        const sets = ex.sets.map((st) => ({ w: parseNum(st.w), r: parseReps(st.r), d: st.d.map((dd) => ({ w: parseNum(dd.w), r: parseReps(dd.r) })).filter((dd) => dd.w !== null || dd.r !== null) }))
+          .filter((st) => st.w !== null || st.r !== null || st.d.length);
+        const prev = prevOf(ex.name);
+        const top = topWeight({ sets }), pw = prev ? topWeight(prev) : null;
+        const delta = top !== null && pw !== null && top !== pw ? (top > pw ? 'up' : 'down') : null;
+        return { name: ex.name, sets, note: ex.note || '', delta };
       });
       saveWorkout({ id: w.id, day: dateF.get() || todayISO(), duration: parseNum(dur.value), coach: !!w.coach, exercises, note: m.querySelector('#w-note').value.trim() });
       closeModal();

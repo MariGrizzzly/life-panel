@@ -44,18 +44,57 @@ export function exerciseNames(workouts) {
   return [...m.values()].sort((a, b) => b.last.localeCompare(a.last) || b.n - a.n).map((x) => x.name);
 }
 
+// Упражнение хранит список подходов: [{ w: вес|null, r: повторы|null, d: [{w, r}] — ступени дроп-сета }].
+// Старые записи (подходы × повторы × один вес) переводим в этот вид на лету.
+export function normalizeEx(e) {
+  if (!e) return e;
+  if (Array.isArray(e.sets)) return { ...e, sets: e.sets.map((x) => ({ w: x.w ?? null, r: x.r ?? null, d: Array.isArray(x.d) ? x.d.map((y) => ({ w: y.w ?? null, r: y.r ?? null })) : [] })) };
+  const n = Math.max(1, Number(e.sets) || (e.weight || e.reps ? 1 : 0));
+  return { name: e.name, note: e.note || '', delta: e.delta || null, sets: Array.from({ length: n }, () => ({ w: e.weight ?? null, r: e.reps ?? null, d: [] })) };
+}
+const numW = (v) => (v === null || v === undefined || v === '' || isNaN(Number(v)) ? null : Number(v));
+// Рабочий (максимальный) вес упражнения — по нему считаем прогресс
+export function topWeight(e) {
+  let mx = null;
+  (normalizeEx(e).sets || []).forEach((st) => [st, ...(st.d || [])].forEach((x) => { const w = numW(x.w); if (w !== null && (mx === null || w > mx)) mx = w; }));
+  return mx;
+}
+// Короткая запись подходов: «3×10 · 10 кг», «5 кг, 2 подх. · 15 кг», «40→35→30 кг × 15/10/—»
+export function formatSets(e) {
+  const sets = normalizeEx(e).sets || [];
+  const kg = (w) => (numW(w) === null ? '' : `${fmtKg(w)} кг`);
+  const rr = (r) => (r === null || r === undefined || r === '' ? '' : String(r));
+  const groups = [];
+  sets.forEach((st) => {
+    const g = groups[groups.length - 1];
+    if (!st.d.length && g && !g.st.d.length && String(g.st.w) === String(st.w) && rr(g.st.r) === rr(st.r)) g.n++;
+    else groups.push({ st, n: 1 });
+  });
+  return groups.map(({ st, n }) => {
+    if (st.d.length) {
+      const parts = [st, ...st.d];
+      const ws = parts.map((x) => (numW(x.w) === null ? '—' : fmtKg(x.w))).join('→');
+      const rs = parts.some((x) => rr(x.r)) ? ` × ${parts.map((x) => rr(x.r) || '—').join('/')}` : '';
+      return `${n > 1 ? `${n}× ` : ''}дроп ${ws} кг${rs}`;
+    }
+    const w = kg(st.w), r = rr(st.r);
+    if (n > 1) return r ? `${n}×${r}${w ? ` · ${w}` : ''}` : `${n} подх.${w ? ` · ${w}` : ''}`;
+    return [w, r ? `×${r}` : ''].filter(Boolean).join(' ') || '1 подх.';
+  }).join(', ');
+}
+
 // Последний раз, когда делала упражнение (до указанной тренировки)
 export function lastExercise(workouts, name, { exceptId = null, beforeDay = null } = {}) {
   const k = norm(name);
   const list = workouts.filter((w) => w.id !== exceptId && (!beforeDay || w.day <= beforeDay)).sort((a, b) => b.day.localeCompare(a.day));
   for (const w of list) {
     const e = (w.exercises || []).find((x) => norm(x.name) === k);
-    if (e) return { ...e, day: w.day };
+    if (e) return { ...normalizeEx(e), day: w.day };
   }
   return null;
 }
 
-// История веса по каждому упражнению — для графиков
+// История рабочего веса по каждому упражнению — для графиков
 export function exerciseProgress(workouts) {
   const m = new Map();
   [...workouts].sort((a, b) => a.day.localeCompare(b.day)).forEach((w) => (w.exercises || []).forEach((e) => {
@@ -63,7 +102,7 @@ export function exerciseProgress(workouts) {
     const k = norm(e.name);
     const x = m.get(k) || { name: e.name, points: [] };
     x.name = e.name;
-    x.points.push({ day: w.day, weight: Number(e.weight) || 0, sets: e.sets, reps: e.reps, delta: e.delta || null });
+    x.points.push({ day: w.day, weight: topWeight(e) || 0, delta: e.delta || null, text: formatSets(e) });
     m.set(k, x);
   }));
   return [...m.values()].sort((a, b) => b.points[b.points.length - 1].day.localeCompare(a.points[a.points.length - 1].day));

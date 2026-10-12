@@ -12,6 +12,18 @@ export function dueChip(t) {
   return `<span class="chip" style="background:${late ? '#F6E2E0' : '#FCEADF'};color:${late ? '#9A2F22' : '#9A4214'}">до ${esc(shortDate(t.deadline))}</span>`;
 }
 
+const WDN = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+export function repeatLabel(days) {
+  if (!days || !days.length) return '';
+  const k = [...days].sort().join('');
+  if (k === '1234567') return 'каждый день';
+  if (k === '12345') return 'по будням';
+  if (k === '67') return 'по выходным';
+  if (days.length === 1) return ['по понедельникам', 'по вторникам', 'по средам', 'по четвергам', 'по пятницам', 'по субботам', 'по воскресеньям'][days[0] - 1];
+  return [...days].sort().map((d) => WDN[d - 1]).join(', ');
+}
+export const repeatChip = (t) => (t.repeat && t.repeat.length ? `<span class="chip rep" title="Повторяется ${esc(repeatLabel(t.repeat))}">↻ ${esc(repeatLabel(t.repeat))}</span>` : '');
+
 export function tagChips(t) {
   return (t.tags || []).map((tg) => `<span class="chip">#${esc(tg)}</span>`).join('');
 }
@@ -20,7 +32,7 @@ export function taskRow(t, { meta = '', wide = false } = {}) {
   const done = t.status === 'done';
   return `<div class="${wide ? 'lrow' : 'trow'}" data-key="t-${esc(t.id)}">
     ${checkbox(t)}
-    <button class="task-title${done ? ' done-text' : ''}" data-action="edit-task" data-id="${esc(t.id)}">${esc(t.title)}${t.status === 'doing' && !done ? ' <span class="chip" style="background:#E4EEF7;color:#0D4471">в работе</span>' : ''}</button>
+    <button class="task-title${done ? ' done-text' : ''}" data-action="edit-task" data-id="${esc(t.id)}">${esc(t.title)}${t.status === 'doing' && !done ? ' <span class="chip" style="background:#E4EEF7;color:#0D4471">в работе</span>' : ''}${t.repeat && t.repeat.length ? ` <span class="chip rep" title="Повторяется ${esc(repeatLabel(t.repeat))}">↻${wide ? ' ' + esc(repeatLabel(t.repeat)) : ''}</span>` : ''}</button>
     ${meta ? `<span class="meta muted" style="font-size:12px;font-weight:600">${esc(meta)}</span>` : ''}
     ${wide ? dueChip(t) + tagChips(t) : ''}
   </div>`;

@@ -38,10 +38,10 @@ export function sidebar({ section, name, badges, backupTitle, backupText, backup
 <nav class="sidebar" aria-label="Разделы" data-key="sidebar">
   ${SEA}
   <div class="side-inner">
-    <div class="brand">
+    <a class="brand" href="#today" aria-label="На «Сегодня»" style="color:inherit;text-decoration:none">
       <div class="brand-orb"><span class="water" style="height:58%;background:linear-gradient(180deg,#4AA3E3,#14629E)"><svg class="wave" viewBox="0 0 240 20" preserveAspectRatio="none" style="position:absolute;left:0;top:-4px;width:200%;height:5px" aria-hidden="true"><path d="${WAVE_PATH}" fill="#4AA3E3"></path></svg></span></div>
       <div><div class="brand-name">${esc(name || 'Моя панель')}</div><div class="brand-sub">личная панель</div></div>
-    </div>
+    </a>
     ${group('daily')}
     <div class="nav-sec">Мои разделы</div>
     ${group('mine')}

@@ -1,7 +1,7 @@
 import { esc, todayISO, whenOf, WHEN_LABEL, WHEN_ORDER, dayMonth, shortDate } from '../util.js';
 import { icon } from '../ui/icons.js';
 import { projectOf, NO_PROJECT } from '../store.js';
-import { taskRow, checkbox, dueChip } from './shared.js';
+import { taskRow, checkbox, dueChip, repeatChip } from './shared.js';
 import { quickAddForm } from './today.js';
 import { addDays } from '../util.js';
 
@@ -108,7 +108,7 @@ function boardView(tasks) {
       <div style="display:flex;justify-content:space-between;padding:4px 6px"><span style="font-size:14px;font-weight:600">${label}</span><span class="muted" style="font-size:13px;font-weight:600">${items.length}</span></div>
       ${items.map((t) => { const p = projectOf(t); return `<div class="bcard lift" data-key="b-${esc(t.id)}">
         <button class="task-title${t.status === 'done' ? ' done-text' : ''}" style="padding:0;font-weight:500;line-height:1.35" data-action="edit-task" data-id="${esc(t.id)}">${esc(t.title)}</button>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip"><span class="pdot" style="background:${esc(p.color)};width:7px;height:7px"></span>${esc(p.name)}</span>${t.date ? `<span class="chip">${esc(shortDate(t.date))}</span>` : ''}${dueChip(t)}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip"><span class="pdot" style="background:${esc(p.color)};width:7px;height:7px"></span>${esc(p.name)}</span>${t.date ? `<span class="chip">${esc(shortDate(t.date))}</span>` : ''}${dueChip(t)}${repeatChip(t)}</div>
         <button class="btn ghost small" style="align-self:flex-start" data-action="set-status" data-id="${esc(t.id)}" data-status="${next[st]}">${nextLabel[st]}</button>
       </div>`; }).join('')}
     </div>`;

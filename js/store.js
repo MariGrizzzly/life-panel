@@ -69,7 +69,13 @@ export const store = {
 // ===== Перевод строк базы ⇄ состояние приложения =====
 const nz = (v) => (v === '' || v === undefined ? null : v);
 const R = {
-  task: (t) => ({ id: t.id, user_id: userId, project_id: t.projectId || null, title: t.title, date: nz(t.date), time: t.time || '', deadline: nz(t.deadline), tags: t.tags || [], status: t.status || 'todo', done_at: t.doneAt || null, created_at: t.createdAt || new Date().toISOString(), updated_at: new Date().toISOString() }),
+  task: (t) => {
+    const row = { id: t.id, user_id: userId, project_id: t.projectId || null, title: t.title, date: nz(t.date), time: t.time || '', deadline: nz(t.deadline), tags: t.tags || [], status: t.status || 'todo', done_at: t.doneAt || null, created_at: t.createdAt || new Date().toISOString(), updated_at: new Date().toISOString() };
+    // Колонки повтора отправляем, только если они используются (чтобы до SQL-шага ничего не ломалось)
+    if (t.repeat !== undefined) row.repeat = t.repeat && t.repeat.length ? t.repeat : null;
+    if (t.seriesId) row.series_id = t.seriesId;
+    return row;
+  },
   project: (p) => ({ id: p.id, user_id: userId, name: p.name, sphere: p.sphere, color: p.color, archived: !!p.archived }),
   habit: (h) => ({ id: h.id, user_id: userId, name: h.name, archived: !!h.archived }),
   event: (e) => ({ id: e.id, user_id: userId, title: e.title, date: e.date, time: e.time || '', cat: e.cat || 'personal' }),
@@ -94,7 +100,7 @@ function fromRemote(r) {
   s.projects = r.projects.map((p) => ({ id: p.id, name: p.name, sphere: p.sphere, color: p.color, archived: p.archived }));
   s.tags = r.tags.map((t) => t.name);
   const local = new Map(state.tasks.map((t) => [t.id, t]));
-  s.tasks = r.tasks.map((t) => ({ id: t.id, title: t.title, projectId: t.project_id, date: t.date, time: t.time || '', deadline: t.deadline || '', tags: t.tags || [], status: t.status, doneAt: t.done_at, createdAt: t.created_at, prevStatus: local.get(t.id) && local.get(t.id).prevStatus }));
+  s.tasks = r.tasks.map((t) => ({ id: t.id, title: t.title, projectId: t.project_id, date: t.date, time: t.time || '', deadline: t.deadline || '', tags: t.tags || [], status: t.status, doneAt: t.done_at, createdAt: t.created_at, repeat: t.repeat === undefined ? undefined : (t.repeat || null), seriesId: t.series_id || null, prevStatus: local.get(t.id) && local.get(t.id).prevStatus }));
   s.inbox = r.inbox.map((i) => ({ id: i.id, text: i.text, createdAt: i.created_at })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   s.habits = r.habits.filter((h) => !h.archived).map((h) => ({ id: h.id, name: h.name }));
   r.habit_log.forEach((l) => { (s.habitLog[l.day] || (s.habitLog[l.day] = {}))[l.habit_id] = true; });
@@ -233,16 +239,53 @@ export const projectOf = (t) => project(t.projectId) || NO_PROJECT;
 
 const newTagOps = (s, tags) => (tags || []).filter((t) => !s.tags.includes(t)).map((t) => { s.tags.push(t); return up('tags', R.tag(t), 'user_id,name'); });
 
+// ===== Повтор задач =====
+// repeat — дни недели: 1 = пн … 7 = вс
+export const isoWeekday = (day) => { const d = new Date(day + 'T12:00:00'); return ((d.getDay() + 6) % 7) + 1; };
+export function nextOccurrence(days, from) {
+  if (!days || !days.length) return from;
+  let d = from;
+  for (let i = 0; i < 8; i++) { if (days.includes(isoWeekday(d))) return d; d = addDays(d, 1); }
+  return from;
+}
+const normRepeat = (r) => (Array.isArray(r) && r.length ? [...new Set(r.map(Number))].filter((x) => x >= 1 && x <= 7).sort() : null);
+
 export function addTask(data) {
-  const t = { id: uid(), title: data.title, projectId: data.projectId || null, date: data.date || null, time: data.time || '', deadline: data.deadline || '', tags: data.tags || [], status: 'todo', doneAt: null, createdAt: new Date().toISOString() };
+  const today = todayISO();
+  const repeat = normRepeat(data.repeat);
+  let date = data.date || null;
+  if (repeat) date = nextOccurrence(repeat, date && date > today ? date : today);
+  const t = { id: uid(), title: data.title, projectId: data.projectId || null, date, time: data.time || '', deadline: data.deadline || '', tags: data.tags || [], status: 'todo', doneAt: null, createdAt: new Date().toISOString() };
+  if (repeat) t.repeat = repeat;
   const ops = [];
   store.update((s) => { ops.push(...newTagOps(s, t.tags)); s.tasks.push(t); ops.push(up('tasks', R.task(t))); }, ops);
 }
 export function updateTask(id, patch) {
   const ops = [];
+  const today = todayISO();
   store.update((s) => {
     const t = s.tasks.find((x) => x.id === id); if (!t) return;
     ops.push(...newTagOps(s, patch.tags));
+    patch = { ...patch };
+    if ('repeat' in patch) {
+      patch.repeat = normRepeat(patch.repeat);
+      if (patch.repeat) { const from = patch.date || t.date || today; patch.date = nextOccurrence(patch.repeat, from > today ? from : today); }
+      else if (t.repeat === undefined) delete patch.repeat;
+    }
+    const rep = 'repeat' in patch ? patch.repeat : t.repeat;
+    // Отметила повторяющуюся задачу: в истории остаётся выполненная копия, а сама задача переезжает на следующий день повтора
+    if (patch.status === 'done' && t.status !== 'done' && rep && rep.length) {
+      const { status, prevStatus, ...rest } = patch;
+      Object.assign(t, rest);
+      const copy = { ...t, id: uid(), repeat: undefined, seriesId: t.id, status: 'done', doneAt: new Date().toISOString(), date: today, createdAt: new Date().toISOString(), prevStatus: t.status };
+      delete copy.repeat;
+      s.tasks.push(copy);
+      ops.push(up('tasks', R.task(copy)));
+      const after = t.date && t.date > today ? addDays(t.date, 1) : addDays(today, 1);
+      t.date = nextOccurrence(rep, after); t.status = 'todo'; t.doneAt = null;
+      ops.push(up('tasks', R.task(t)));
+      return;
+    }
     Object.assign(t, patch);
     if (patch.status) t.doneAt = patch.status === 'done' ? (t.doneAt || new Date().toISOString()) : null;
     ops.push(up('tasks', R.task(t)));
@@ -250,6 +293,15 @@ export function updateTask(id, patch) {
 }
 export function toggleTask(id) {
   const t = state.tasks.find((x) => x.id === id); if (!t) return;
+  // Сняла галочку с выполненной копии повтора — возвращаем задачу-серию на этот день
+  if (t.status === 'done' && t.seriesId) {
+    const ser = state.tasks.find((x) => x.id === t.seriesId);
+    if (ser && ser.status !== 'done') {
+      if (!ser.date || ser.date > t.date) updateTask(ser.id, { date: t.date });
+      deleteTask(t.id);
+      return;
+    }
+  }
   updateTask(id, { status: t.status === 'done' ? (t.prevStatus || 'todo') : 'done', prevStatus: t.status === 'done' ? t.prevStatus : t.status });
 }
 // Невыполненные задачи с прошедшей датой сами переезжают на сегодня
