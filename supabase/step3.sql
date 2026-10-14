@@ -29,10 +29,10 @@ drop policy if exists own_rows on billiards;
 create policy own_rows on billiards for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- Перенос бильярдной статистики Марины из таблицы (февраль–март 2026).
--- Аккаунт в проекте один, поэтому берём первого пользователя. Повторный запуск ничего не задвоит.
+-- Берём аккаунт, у которого есть профиль (твой). Повторный запуск ничего не задвоит.
 insert into billiards (user_id, day, drills)
 select u.id, v.day::date, v.drills
-from (select id from auth.users order by created_at limit 1) u,
+from (select user_id as id from profiles order by user_id limit 1) u,
 (values
   ('2026-02-02', '[{"name": "Прямой в угол", "hits": 5, "attempts": 6}, {"name": "Свояк в центр (слева)", "hits": 2, "attempts": 9}, {"name": "Свояк в центр (справа)", "hits": 5, "attempts": 8}, {"name": "Чужой в центр", "hits": 5, "attempts": 8}, {"name": "Свояк в центр из угла", "hits": 5, "attempts": 22}]'::jsonb),
   ('2026-02-12', '[{"name": "Прямой в центр", "hits": 6, "attempts": 11}, {"name": "Свояк в центр (слева)", "hits": 7, "attempts": 12}, {"name": "Чужой в центр", "hits": 8, "attempts": 13}, {"name": "Свояк в центр из угла", "hits": 5, "attempts": 8}]'::jsonb),
