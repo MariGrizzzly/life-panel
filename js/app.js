@@ -5,10 +5,11 @@ import { resetGreeting } from './texts.js';
 import { icon } from './ui/icons.js';
 import { auth } from './remote.js';
 import * as Auth from './pages/auth.js';
-import { esc, todayISO } from './util.js';
+import { esc, todayISO, addDays } from './util.js';
 import { sidebar, tabbar, SECTIONS } from './ui/nav.js';
 import { patch } from './ui/morph.js';
 import { startFish } from './ui/fish.js';
+import { openQuick, quickOpen } from './ui/quick.js';
 import { taskModal, projectModal, eventModal, ask } from './ui/modals.js';
 import * as Today from './pages/today.js';
 import * as Tasks from './pages/tasks.js';
@@ -75,11 +76,19 @@ function render() {
       </div>
     </main>
     ${tabbar(ui.section, ui.moreMenu)}
+    <button class="fab" data-action="quick-add" data-key="fab" aria-label="Быстро добавить задачу" title="Быстро добавить задачу — клавиша N">${icon('plus', 26, 2.4)}</button>
   </div>`;
   patch(app, html);
   document.title = `${label || 'Сегодня'} — Моя панель`;
   const af = app.querySelector('[data-autofocus]');
   if (af && document.activeElement !== af && !af.dataset.focused) { af.dataset.focused = '1'; af.focus(); }
+}
+
+// Быстрое добавление задачи откуда угодно
+function quick(projectId) {
+  const pr = projectId !== undefined && projectId !== '' ? projectId
+    : (ui.section === 'tasks' && store.get().projects.some((p) => p.id === ui.taskSel) ? ui.taskSel : '');
+  openQuick({ projectId: pr, date: ui.section !== 'tasks' ? todayISO() : ui.taskSel === 'upcoming' ? addDays(todayISO(), 1) : ui.taskSel === 'nodate' ? '' : todayISO(), toast });
 }
 
 function toast(msg) {
@@ -101,6 +110,7 @@ const actions = {
   'toggle-task': (el) => toggleTask(el.dataset.id),
   'edit-task': (el) => taskModal({ id: el.dataset.id }),
   'add-task': (el) => taskModal(el.dataset.project ? { projectId: el.dataset.project } : {}),
+  'quick-add': (el) => quick(el.dataset.project),
   'quick-open': (el) => { ui.quickAdd = ui.quickAdd === el.dataset.project ? null : el.dataset.project; render(); },
   'quick-close': () => { ui.quickAdd = null; render(); },
   'quick-more': (el) => {
@@ -154,9 +164,10 @@ const actions = {
   'pr-menu': () => { ui.prMenu = !ui.prMenu; render(); },
   'pr-pick': (el) => { ui.todayPr = el.dataset.id; ui.prMenu = false; ui.moreMenu = false; render(); },
   'today-sphere': (el) => { ui.todaySphere = el.dataset.id; ui.todayPr = 'all'; render(); },
-  'go': (el) => { if (el.dataset.view) { ui.taskView = el.dataset.view; ui.taskSel = 'today'; } location.hash = '#' + el.dataset.to; },
+  'go': (el) => { if (el.dataset.view) { ui.taskView = el.dataset.view; ui.taskSel = 'today'; } if (el.dataset.sel) { ui.taskSel = el.dataset.sel; ui.taskView = 'list'; } if (el.dataset.view === 'report') ui.reportDay = null; location.hash = '#' + el.dataset.to; },
   'toggle-list-menu': () => { ui.listMenu = !ui.listMenu; render(); },
-  'task-sel': (el) => { ui.taskSel = el.dataset.id; ui.listMenu = false; render(); },
+  'task-sel': (el) => { ui.taskSel = el.dataset.id; if (el.dataset.id === 'done') ui.taskView = 'list'; ui.listMenu = false; render(); },
+  'report-day': (el) => { ui.reportDay = el.dataset.day || null; ui.taskView = 'report'; if (ui.taskSel === 'inbox' || ui.taskSel === 'done') ui.taskSel = 'today'; render(); window.scrollTo(0, 0); },
   'task-view': (el) => { ui.taskView = el.dataset.id; if (ui.taskSel === 'inbox') ui.taskSel = 'today'; render(); },
   'inbox-to-task': (el) => { const i = store.get().inbox.find((x) => x.id === el.dataset.id); if (i) taskModal({ title: i.text, fromInbox: i.id }); },
   'inbox-delete': (el) => removeInbox(el.dataset.id),
@@ -181,7 +192,7 @@ const forms = {
     const v = form.title.value.trim(); if (!v) { ui.quickAdd = null; render(); return; }
     const key = form.dataset.project;
     addTask({ title: v, projectId: key === 'none' ? null : key, date: form.dataset.date || null });
-    form.title.value = ''; form.title.focus();
+    ui.quickAdd = null; render(); toast('Задача добавлена');
   },
   'diary-q-custom': (form) => { const v = form.q.value.trim(); if (!v) return; addQuestion(v); },
   'save-greetings': (form) => { setPrefs({ greetings: lines(form.lines.value) }); resetGreeting(); toast('Приветствия сохранены'); },
@@ -335,6 +346,12 @@ app.addEventListener('change', (e) => {
   }
 });
 document.addEventListener('keydown', (e) => {
+  // N (или Т в русской раскладке) и ⌘K / Ctrl+K — быстро добавить задачу
+  if (ui.screen === 'app' && !quickOpen() && !document.querySelector('#modal-root .backdrop, [data-ask]')) {
+    const t = e.target; const typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+    const k = (e.key || '').toLowerCase();
+    if (((e.metaKey || e.ctrlKey) && (k === 'k' || k === 'л')) || (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && (k === 'n' || k === 'т'))) { e.preventDefault(); quick(); return; }
+  }
   if (e.key !== 'Escape') return;
   if (ui.listMenu || ui.qMenu || ui.prMenu || ui.moreMenu) { ui.listMenu = false; ui.qMenu = false; ui.prMenu = false; ui.moreMenu = false; render(); }
   else if (ui.quickAdd && e.target.closest && e.target.closest('.quick-add')) { ui.quickAdd = null; render(); }

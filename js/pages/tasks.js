@@ -1,11 +1,11 @@
-import { esc, todayISO, whenOf, WHEN_LABEL, WHEN_ORDER, dayMonth, shortDate } from '../util.js';
+import { esc, todayISO, whenOf, WHEN_LABEL, WHEN_ORDER, dayMonth, shortDate, doneDay, longDate } from '../util.js';
 import { icon } from '../ui/icons.js';
 import { projectOf, NO_PROJECT } from '../store.js';
 import { taskRow, checkbox, dueChip, repeatChip } from './shared.js';
 import { quickAddForm } from './today.js';
 import { addDays } from '../util.js';
 
-const SMART = { inbox: 'Улов', today: 'Сегодня', upcoming: 'Предстоящие', nodate: 'Без даты', all: 'Все задачи', done: 'Выполненные' };
+const SMART = { inbox: 'Улов', today: 'Сегодня', upcoming: 'Предстоящие', nodate: 'Без даты', all: 'Все задачи', done: 'Сделано' };
 
 export function title() { return ['Задачи', 'По проектам — списком, доской или отчётом за день']; }
 
@@ -32,12 +32,12 @@ export function render(s, ui) {
   const sel = ui.taskSel;
   const today = todayISO();
   const { tasks, name, color, isProject } = selection(s, sel);
-  const openCount = sel === 'inbox' ? s.inbox.length : tasks.filter((t) => t.status !== 'done').length;
-  const cnt = (id) => sel === id ? openCount : (id === 'inbox' ? s.inbox.length : selection(s, id).tasks.filter((t) => t.status !== 'done').length);
+  const openCount = sel === 'inbox' ? s.inbox.length : sel === 'done' ? tasks.length : tasks.filter((t) => t.status !== 'done').length;
+  const cnt = (id) => id === 'done' ? '' : sel === id ? openCount : (id === 'inbox' ? s.inbox.length : selection(s, id).tasks.filter((t) => t.status !== 'done').length);
 
   const opt = (id, label, dot) => `<button class="opt${sel === id ? ' on' : ''}" data-action="task-sel" data-id="${esc(id)}">${dot ? `<span class="pdot" style="background:${esc(dot)};width:9px;height:9px"></span>` : ''}<span style="flex:1">${esc(label)}</span><span class="muted" style="font-size:12px">${cnt(id)}</span></button>`;
   const menu = ui.listMenu ? `<div class="menu fade" style="top:58px;left:0;width:300px;max-height:460px;overflow:auto">
-      ${['inbox', 'today', 'upcoming', 'nodate', 'all', 'done'].map((id) => opt(id, SMART[id])).join('')}
+      ${['inbox', 'today', 'done', 'upcoming', 'nodate', 'all'].map((id) => opt(id, SMART[id])).join('')}
       <div class="menu-sec">Работа</div>
       ${s.projects.filter((p) => p.sphere === 'work' && !p.archived).map((p) => opt(p.id, p.name, p.color)).join('')}
       <div class="menu-sec">Личное</div>
@@ -52,9 +52,10 @@ export function render(s, ui) {
 
   let body = '';
   if (view === 'inbox') body = inboxView(s);
+  else if (view === 'list' && sel === 'done') body = doneView(s, tasks, today);
   else if (view === 'list') body = listView(s, tasks, isProject, today, ui, sel);
   else if (view === 'board') body = boardView(tasks);
-  else body = reportView(s, today);
+  else body = reportView(s, ui.reportDay && ui.reportDay <= today ? ui.reportDay : today, today);
 
   return `<section class="card fade" data-key="page-tasks" style="display:flex;flex-direction:column;gap:18px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
@@ -64,7 +65,7 @@ export function render(s, ui) {
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <div class="seg" role="group" aria-label="Вид">${seg}</div>
-        <button class="btn" data-action="add-task" data-project="${isProject && sel !== 'none' ? esc(sel) : ''}">${icon('plus', 18, 2.2)}Задача</button>
+        <button class="btn" data-action="quick-add" data-project="${isProject && sel !== 'none' ? esc(sel) : ''}">${icon('plus', 18, 2.2)}Задача</button>
       </div>
     </div>
     ${body}
@@ -89,6 +90,19 @@ function listView(s, tasks, isProject, today, ui, sel) {
         return taskRow(t, { meta, wide: true });
       }).join('')}
       ${isProject ? '' : quickAddForm(ui, g.key, qDate)}
+    </div>`).join('')}</div>`;
+}
+
+// История: всё сделанное по дням, свежее сверху
+const dayLabel = (d, today) => d === today ? 'Сегодня' : d === addDays(today, -1) ? 'Вчера' : longDate(d);
+function doneView(s, tasks, today) {
+  if (!tasks.length) return '<div class="empty">Тут будет всё, что сделано, — по дням.</div>';
+  const by = {};
+  tasks.forEach((t) => { const d = doneDay(t) || 'nodate'; (by[d] ||= []).push(t); });
+  const days = Object.keys(by).sort().reverse();
+  return `<div style="display:flex;flex-direction:column;gap:18px">${days.map((d) => `<div data-key="dd-${esc(d)}">
+      <div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;padding:4px 0 6px">${esc(d === 'nodate' ? 'Без даты' : dayLabel(d, today))}<span class="muted" style="font-weight:500;font-size:13px">${by[d].length}</span>${d !== 'nodate' ? `<button class="link" style="margin-left:auto;font-size:13px" data-action="report-day" data-day="${esc(d)}">отчёт за день</button>` : ''}</div>
+      ${by[d].sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || '')).map((t) => taskRow(t, { meta: projectOf(t).name, wide: true })).join('')}
     </div>`).join('')}</div>`;
 }
 
@@ -117,7 +131,7 @@ function boardView(tasks) {
 
 export function reportText(s, today) {
   const work = s.tasks.filter((t) => projectOf(t).sphere === 'work');
-  const done = work.filter((t) => t.status === 'done' && (t.doneAt || '').slice(0, 10) === today);
+  const done = work.filter((t) => t.status === 'done' && doneDay(t) === today);
   const doing = work.filter((t) => t.status === 'doing');
   const tomorrow = work.filter((t) => t.status !== 'done' && t.date && t.date > today && t.date <= nextWorkday(today));
   const byProject = (list) => {
@@ -138,13 +152,15 @@ function nextWorkday(today) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
-function reportView(s, today) {
+function reportView(s, day, realToday) {
+  const today = day;
   const text = reportText(s, today);
   const work = s.tasks.filter((t) => projectOf(t).sphere === 'work');
-  const doneN = work.filter((t) => t.status === 'done' && (t.doneAt || '').slice(0, 10) === today).length;
+  const doneN = work.filter((t) => t.status === 'done' && doneDay(t) === today).length;
   const doingN = work.filter((t) => t.status === 'doing').length;
   return `<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
     <div style="flex:2 1 380px;min-width:0;display:flex;flex-direction:column;gap:10px">
+      <div class="daynav"><button class="iconbtn" data-action="report-day" data-day="${esc(addDays(day, -1))}" aria-label="Предыдущий день">‹</button><b>${esc(dayLabel(day, realToday))}${day !== realToday ? `, ${esc(dayMonth(day))}` : ''}</b><button class="iconbtn" data-action="report-day" data-day="${esc(addDays(day, 1))}" aria-label="Следующий день"${day >= realToday ? ' disabled' : ''}>›</button>${day !== realToday ? '<button class="link" data-action="report-day" data-day="" style="font-size:13px">к сегодня</button>' : ''}</div>
       <div class="muted" style="font-size:13px">Собирается сам из рабочих задач. Отметь задачу выполненной — она появится в отчёте.</div>
       <div class="report" id="report-text">${esc(text)}</div>
       <label for="rc" style="font-size:13px;font-weight:600">Комментарий, блокеры</label>
@@ -155,9 +171,9 @@ function reportView(s, today) {
       </div>
     </div>
     <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:10px">
-      <div class="tile"><div class="muted" style="font-size:13px">Сделано сегодня</div><div class="tile-v">${doneN}</div></div>
+      <div class="tile"><div class="muted" style="font-size:13px">Сделано ${day === realToday ? 'сегодня' : esc(dayLabel(day, realToday).toLowerCase())}</div><div class="tile-v">${doneN}</div></div>
       <div class="tile"><div class="muted" style="font-size:13px">В работе</div><div class="tile-v">${doingN}</div></div>
-      <div class="tile muted" style="font-size:13px;line-height:1.55">Отправка начальнику автоматически и архив отчётов появятся, когда подключим сервер.</div>
+      <button class="tile" data-action="task-sel" data-id="done" style="text-align:left;cursor:pointer;border:1px solid var(--line);font:inherit"><div class="muted" style="font-size:13px">Вся история</div><div style="font-weight:600;margin-top:4px;color:var(--deep)">Что сделано по дням →</div></button>
     </div>
   </div>`;
 }

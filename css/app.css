@@ -437,3 +437,33 @@ a { color: var(--accent); }
 .repday { width: 38px; height: 34px; border-radius: 10px; border: 1px solid #C9DCEB; background: #FFFFFF; color: var(--ink-2); font-size: 13px; font-weight: 600; cursor: pointer; }
 .repday.on { background: linear-gradient(180deg, #2E8FD6, #14629E); border-color: #14629E; color: #FFFFFF; }
 .repquick { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.listpop.searchable { min-width: 260px; padding-top: 0; }
+.lp-search { position: sticky; top: 0; z-index: 1; background: #FFFFFF; padding: 6px 0 6px; }
+.lp-search input { width: 100%; min-height: 38px; border: 1px solid #C5D3DF; border-radius: 10px; padding: 0 10px; font-size: 14px; outline: none; background: var(--surface-2); }
+.lp-search input:focus { border-color: #3A93D4; box-shadow: 0 0 0 3px rgba(58,147,212,.15); background: #FFFFFF; }
+/* Быстрое добавление */
+.fab { position: fixed; right: 28px; bottom: 28px; z-index: 60; width: 60px; height: 60px; border-radius: 22px; border: 1px solid #0D4471; color: #FFFFFF; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(70% 50% at 30% 0%, rgba(166,219,250,.7), rgba(166,219,250,0) 70%), linear-gradient(180deg, #2E8FD6, #0F4C80); box-shadow: 0 14px 30px rgba(13,74,128,.35), inset 0 1px 0 rgba(255,255,255,.35); transition: transform .15s ease, box-shadow .15s ease; }
+.fab:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 18px 36px rgba(13,74,128,.42), inset 0 1px 0 rgba(255,255,255,.35); }
+@media (max-width: 860px) { .fab { display: none; } }
+.qa-back { position: fixed; inset: 0; z-index: 140; background: rgba(6,30,52,.35); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; }
+.qa-panel { width: 100%; max-width: 620px; background: #FFFFFF; border-radius: 22px; box-shadow: 0 30px 80px rgba(5,25,45,.35); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.qa-inputrow { display: flex; align-items: center; gap: 10px; padding: 4px 6px; color: var(--accent); }
+.qa-inputrow input { flex: 1; min-width: 0; border: 0; outline: none; font-size: 18px; padding: 10px 0; color: var(--ink); background: transparent; }
+.qa-sug { border: 1px solid var(--line); border-radius: 14px; padding: 6px; max-height: 260px; overflow: auto; }
+.qa-sugcap { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 4px 10px 6px; }
+.qa-sug .opt.hi { background: var(--tint); }
+.qa-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 0 4px; }
+.qa-chip { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid #C9DCEB; background: #FFFFFF; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; max-width: 260px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.qa-chip:hover { border-color: #9CC4E4; background: var(--tint); }
+.qa-dates { display: inline-flex; background: var(--bg); border-radius: 12px; padding: 3px; }
+.qa-dates button { min-height: 30px; padding: 0 11px; border: 0; border-radius: 9px; background: transparent; font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.qa-dates button.on { background: #FFFFFF; color: var(--ink); box-shadow: 0 1px 3px rgba(15,34,51,.14); }
+.qa-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid #F0F4F8; padding: 10px 4px 0; }
+@media (max-width: 860px) { .qa-back { padding-top: 10px; } .qa-inputrow input { font-size: 17px; } }
+.daynav { display: flex; align-items: center; gap: 6px; }
+.daynav b { font-size: 15px; min-width: 120px; text-align: center; }
+.daynav .iconbtn { font-size: 22px; }
+.daynav .iconbtn[disabled] { opacity: .3; cursor: default; }
+@media (min-width: 861px) { .main .wrap { padding-bottom: 110px; } }
+@media (max-width: 860px) { .qa-foot .link { flex-basis: 100%; text-align: left; } .qa-foot > span { display: none; } .qa-foot .btn { flex: 1; } }

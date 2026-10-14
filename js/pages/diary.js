@@ -1,5 +1,5 @@
 // Дневник: запись дня, настроение, сон, энергия, вопросы, фото, архив.
-import { esc, todayISO, addDays, longDate, parseISO, plural } from '../util.js';
+import { esc, todayISO, addDays, longDate, parseISO, plural, doneDay } from '../util.js';
 import { icon } from '../ui/icons.js';
 import { sync, diaryStreak, diaryHasEntry, projectOf } from '../store.js';
 import { questionsOf } from '../texts.js';
@@ -41,7 +41,7 @@ export function render(s, ui) {
 // ===== Запись =====
 function dayContext(s, day) {
   const out = [];
-  s.tasks.filter((t) => t.status === 'done' && ((t.doneAt || '').slice(0, 10) === day || (!t.doneAt && t.date === day))).slice(0, 6)
+  s.tasks.filter((t) => t.status === 'done' && doneDay(t) === day).slice(0, 6)
     .forEach((t) => out.push(`${projectOf(t).id ? projectOf(t).name + ': ' : ''}${t.title}`));
   s.habits.forEach((h) => { if (s.habitLog[day] && s.habitLog[day][h.id]) out.push(h.name); });
   s.events.filter((e) => e.date === day).forEach((e) => out.push(`${e.time ? e.time + ' ' : ''}${e.title}`));

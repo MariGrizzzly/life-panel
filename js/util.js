@@ -47,3 +47,6 @@ export const whenOf = (t, today = todayISO()) => {
 };
 export const WHEN_LABEL = { overdue: 'Просрочено', today: 'Сегодня', tomorrow: 'Завтра', week: 'На этой неделе', later: 'Позже', nodate: 'Без даты', past: 'Прошедшие' };
 export const WHEN_ORDER = ['overdue', 'today', 'tomorrow', 'week', 'later', 'nodate', 'past'];
+
+// День, когда задача выполнена (по местному времени)
+export const doneDay = (t) => (t.doneAt ? iso(new Date(t.doneAt)) : (t.date || null));

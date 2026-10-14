@@ -209,36 +209,68 @@ const CHEV_R = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stro
 export const chevron = CHEV;
 
 // groups: [{ label?, options: [{ value, label, color?, accent? }] }]
-export function selectField(host, { value = '', id, name, groups = () => [], placeholder = 'Выбрать' } = {}) {
+// search — строка поиска сверху списка; create — варианты «создать новое» из набранного текста
+export function selectField(host, { value = '', id, name, groups = () => [], placeholder = 'Выбрать', search = '', create = null, onCreate = null } = {}) {
   let val = value;
+  let q = '';
   host.classList.add('timefield');
-  host.innerHTML = `<button type="button" id="${id}" class="input pick" aria-haspopup="listbox" aria-expanded="false"><span data-label></span>${CHEV}</button><input type="hidden" name="${name}"><div class="timepop listpop" hidden role="listbox"></div>`;
+  host.innerHTML = `<button type="button" id="${id}" class="input pick" aria-haspopup="listbox" aria-expanded="false"><span data-label></span>${CHEV}</button><input type="hidden" name="${name}"><div class="timepop listpop${search ? ' searchable' : ''}" hidden role="listbox">${search ? `<div class="lp-search"><input type="text" data-q placeholder="${esc(search)}" autocomplete="off" aria-label="${esc(search)}"></div>` : ''}<div data-list></div></div>`;
   const btn = host.querySelector('button.pick');
   const hidden = host.querySelector('input[type=hidden]');
   const label = host.querySelector('[data-label]');
   const pop = host.querySelector('.timepop');
+  const listEl = host.querySelector('[data-list]');
+  const qIn = host.querySelector('[data-q]');
   let off = null; let hi = -1;
-  const flat = () => groups().flatMap((g) => g.options);
-  const find = (v) => flat().find((o) => o.value === v);
+  const all = () => groups().flatMap((g) => g.options);
+  const match = (o) => !q || o.label.toLowerCase().includes(q.toLowerCase());
+  const shownGroups = () => groups().map((g) => ({ ...g, options: g.options.filter(match) })).filter((g) => g.options.length);
+  const creates = () => {
+    if (!q.trim() || !create || all().some((o) => o.label.toLowerCase() === q.trim().toLowerCase())) return [];
+    return create.map((c) => ({ value: '__create:' + c.key, label: `Создать «${q.trim()}» ${c.label}`, accent: true, create: c.key }));
+  };
+  const flat = () => [...shownGroups().flatMap((g) => g.options), ...creates()];
+  const find = (v) => all().find((o) => o.value === v);
   const dot = (o) => (o && o.color ? `<span class="pdot" style="background:${esc(o.color)};width:10px;height:10px"></span>` : '');
   const sync = () => { const o = find(val); hidden.value = val; label.innerHTML = o ? `${dot(o)}<span>${esc(o.label)}</span>` : `<span class="ph">${esc(placeholder)}</span>`; };
+  const optHtml = (o, i) => `<button type="button" class="opt${o.value === val ? ' on' : ''}${i === hi ? ' hi' : ''}" data-v="${esc(o.value)}" role="option" aria-selected="${o.value === val}" style="${o.accent ? 'color:var(--accent);font-weight:600' : ''}">${o.create ? '<span style="font-size:16px;line-height:1">＋</span>' : dot(o)}<span style="flex:1">${esc(o.label)}</span>${o.value === val ? '<span aria-hidden="true">✓</span>' : ''}</button>`;
   const draw = () => {
     const opts = flat();
-    pop.innerHTML = groups().map((g) => `${g.label ? `<div class="menu-sec">${esc(g.label)}</div>` : ''}${g.options.map((o) => { const i = opts.indexOf(o); return `<button type="button" class="opt${o.value === val ? ' on' : ''}${i === hi ? ' hi' : ''}" data-v="${esc(o.value)}" role="option" aria-selected="${o.value === val}" style="${o.accent ? 'color:var(--accent);font-weight:600' : ''}">${dot(o)}<span style="flex:1">${esc(o.label)}</span>${o.value === val ? '<span aria-hidden="true">✓</span>' : ''}</button>`; }).join('')}`).join('');
+    const cr = creates();
+    listEl.innerHTML = shownGroups().map((g) => `${g.label ? `<div class="menu-sec">${esc(g.label)}</div>` : ''}${g.options.map((o) => optHtml(o, opts.indexOf(o))).join('')}`).join('') + (cr.length ? `<div class="menu-sec">Новый проект</div>${cr.map((o) => optHtml(o, opts.indexOf(o))).join('')}` : '')
+      + (!opts.length ? '<div class="muted" style="padding:10px;font-size:13px">Ничего не нашлось</div>' : '');
+    const h = listEl.querySelector('.opt.hi'); if (h && h.scrollIntoView) h.scrollIntoView({ block: 'nearest' });
   };
   const show = (v) => {
-    if (v && pop.hidden) { hi = flat().findIndex((o) => o.value === val); draw(); pop.hidden = false; btn.setAttribute('aria-expanded', 'true'); off = onOutside(host, () => show(false)); }
+    if (v && pop.hidden) {
+      q = ''; if (qIn) qIn.value = '';
+      hi = flat().findIndex((o) => o.value === val); draw(); pop.hidden = false; btn.setAttribute('aria-expanded', 'true'); off = onOutside(host, () => show(false));
+      if (qIn) setTimeout(() => qIn.focus(), 0);
+    }
     if (!v && !pop.hidden) { pop.hidden = true; btn.setAttribute('aria-expanded', 'false'); if (off) { off(); off = null; } }
   };
-  const pick = (v) => { show(false); if (v !== '__new') { val = v; sync(); } host.dispatchEvent(new CustomEvent('pick', { detail: v })); };
-  btn.addEventListener('click', () => show(pop.hidden));
-  btn.addEventListener('keydown', (e) => {
+  const pick = (v) => {
+    show(false);
+    if (v.startsWith('__create:')) {
+      const nv = onCreate ? onCreate(q.trim(), v.slice(9)) : null;
+      if (nv) { val = nv; sync(); host.dispatchEvent(new CustomEvent('pick', { detail: nv })); }
+      return;
+    }
+    val = v; sync(); host.dispatchEvent(new CustomEvent('pick', { detail: v }));
+  };
+  const keys = (e) => {
     const opts = flat();
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (pop.hidden) show(true); hi = Math.max(0, Math.min(opts.length - 1, hi + (e.key === 'ArrowDown' ? 1 : -1))); draw(); }
-    else if (e.key === 'Enter' && !pop.hidden && opts[hi]) { e.preventDefault(); pick(opts[hi].value); }
-    else if (e.key === 'Escape' && !pop.hidden) { e.preventDefault(); e.stopPropagation(); show(false); }
-  });
-  pop.addEventListener('click', (e) => { const o = e.target.closest('[data-v]'); if (o) { pick(o.dataset.v); btn.focus(); } });
+    else if (e.key === 'Enter' && !pop.hidden && opts[hi]) { e.preventDefault(); pick(opts[hi].value); btn.focus(); }
+    else if (e.key === 'Escape' && !pop.hidden) { e.preventDefault(); e.stopPropagation(); show(false); btn.focus(); }
+  };
+  btn.addEventListener('click', () => show(pop.hidden));
+  btn.addEventListener('keydown', keys);
+  if (qIn) {
+    qIn.addEventListener('keydown', keys);
+    qIn.addEventListener('input', () => { q = qIn.value; hi = flat().length ? 0 : -1; draw(); });
+  }
+  listEl.addEventListener('click', (e) => { const o = e.target.closest('[data-v]'); if (o) { pick(o.dataset.v); btn.focus(); } });
   sync();
-  return { get: () => val, set: (v) => { val = v; sync(); }, refresh: () => { sync(); if (!pop.hidden) draw(); }, destroy: () => { if (off) off(); } };
+  return { get: () => val, set: (v) => { val = v; sync(); }, refresh: () => { sync(); if (!pop.hidden) draw(); }, open: () => show(true), destroy: () => { if (off) off(); } };
 }

@@ -62,7 +62,7 @@ export function tabbar(section, moreOpen = false) {
   return `<nav class="tabbar" aria-label="Разделы" data-key="tabbar">
     ${sheet}
     ${a('today', 'Сегодня', 'today')}${a('tasks', 'Задачи', 'tasks')}
-    <button class="plus" data-action="add-task" aria-label="Новая задача">${icon('plus', 24, 2.2)}</button>
+    <button class="plus" data-action="quick-add" aria-label="Новая задача">${icon('plus', 24, 2.2)}</button>
     ${a('diary', 'Дневник', 'diary')}
     <button class="${inMore || moreOpen ? 'on' : ''}" data-action="more-menu" aria-expanded="${moreOpen}" aria-haspopup="menu">${icon('menu', 22)}${inMore ? esc((SECTIONS.find((x) => x.id === section) || {}).label || 'Ещё').split(' ')[0] : 'Ещё'}</button>
   </nav>`;

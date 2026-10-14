@@ -60,9 +60,16 @@ function projectGroups(selected) {
     { options: [{ value: '', label: 'Без проекта', color: '#9AAAB5' }] },
     { label: 'Работа', options: opts('work') },
     { label: 'Личное', options: opts('personal') },
-    { options: [{ value: '__new', label: '+ Новый проект…', accent: true }] }
   ].filter((g) => g.options.length);
 }
+export const PROJECT_CREATE = [{ key: 'work', label: '· работа' }, { key: 'personal', label: '· личное' }];
+export function createProjectQuick(name, sphere) {
+  if (!name) return null;
+  const used = store.get().projects.map((p) => p.color);
+  const color = PROJECT_COLORS.find((c) => !used.includes(c)) || PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)];
+  return addProject({ name, sphere, color });
+}
+export { projectGroups };
 const STATUS_GROUPS = [{ options: [{ value: 'todo', label: 'К работе', color: '#9AAAB5' }, { value: 'doing', label: 'В процессе', color: '#2E8FD6' }, { value: 'done', label: 'Готово', color: '#2E8A5C' }] }];
 
 // ===== Задача: создание и редактирование =====
@@ -81,11 +88,6 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
       <div class="field"><label class="label" for="f-deadline">Срок</label><div data-deadline></div></div>
       ${t ? '<div class="field"><label class="label" for="f-status">Статус</label><div data-status></div></div>' : ''}
     </div>
-    <div data-newproj hidden style="border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--surface-2);display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-      <div class="field" style="flex:1 1 200px"><label class="label" for="np-name">Как назовём новый проект?</label><input id="np-name" class="input" placeholder="Например, «Сайт клиента»" autocomplete="off"></div>
-      <div class="seg" role="radiogroup" aria-label="Сфера"><button type="button" class="on" data-np-sphere="work" role="radio" aria-checked="true">Работа</button><button type="button" data-np-sphere="personal" role="radio" aria-checked="false">Личное</button></div>
-      <button type="button" class="btn small" data-np-create>Создать</button>
-    </div>
     <div class="field"><span class="label" id="rep-lbl">Повтор</span><div class="repeat" data-repeat role="group" aria-labelledby="rep-lbl"></div></div>
     <div class="field"><span class="label" id="tags-lbl">Теги</span><div data-tags aria-labelledby="tags-lbl"></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -102,7 +104,7 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
     const dlF = dateField(m.querySelector('[data-deadline]'), { value: data.deadline || '', id: 'f-deadline', name: 'deadline', placeholder: 'без срока', clearLabel: 'Без срока' });
     const projHost = m.querySelector('[data-project]');
     let projF = null;
-    projF = selectField(projHost, { value: data.projectId || '', id: 'f-project', name: 'projectId', groups: () => projectGroups(projF ? projF.get() : data.projectId) });
+    projF = selectField(projHost, { value: data.projectId || '', id: 'f-project', name: 'projectId', groups: () => projectGroups(projF ? projF.get() : data.projectId), search: 'Найти или создать проект…', create: PROJECT_CREATE, onCreate: createProjectQuick });
     const stHost = m.querySelector('[data-status]');
     const stF = stHost ? selectField(stHost, { value: data.status, id: 'f-status', name: 'status', groups: () => STATUS_GROUPS }) : null;
     cleanup = () => { [tagsF, dateF, dlF, projF, stF].forEach((f) => f && f.destroy()); };
@@ -124,35 +126,12 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
       else return;
       drawRep();
     });
-    const np = m.querySelector('[data-newproj]');
-    let npSphere = 'work';
-    projHost.addEventListener('pick', (e) => {
-      np.hidden = e.detail !== '__new';
-      if (!np.hidden) m.querySelector('#np-name').focus();
-    });
-    np.querySelectorAll('[data-np-sphere]').forEach((b) => b.addEventListener('click', () => {
-      npSphere = b.dataset.npSphere;
-      np.querySelectorAll('[data-np-sphere]').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', String(x === b)); });
-    }));
-    const createProject = () => {
-      const name = m.querySelector('#np-name').value.trim();
-      if (!name) { m.querySelector('#np-name').focus(); return null; }
-      const used = store.get().projects.map((p) => p.color);
-      const color = PROJECT_COLORS.find((c) => !used.includes(c)) || PROJECT_COLORS[0];
-      const pid = addProject({ name, sphere: npSphere, color });
-      projF.set(pid);
-      np.hidden = true;
-      return pid;
-    };
-    np.querySelector('[data-np-create]').addEventListener('click', createProject);
-    m.querySelector('#np-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); createProject(); } });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(form);
       const titleV = String(fd.get('title') || '').trim();
       if (!titleV) return;
       let pid = projF.get();
-      if (!np.hidden && m.querySelector('#np-name').value.trim()) pid = createProject();
       const payload = { title: titleV, projectId: pid || null, date: dateF.get() || null, deadline: dlF.get() || '', tags: tagsF.get() };
       if (rep.length || (t && t.repeat && t.repeat.length)) payload.repeat = rep;
       if (t) updateTask(t.id, { ...payload, status: stF ? stF.get() : t.status });

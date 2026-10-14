@@ -1,4 +1,4 @@
-import { esc, todayISO, plural, longDate } from '../util.js';
+import { esc, todayISO, plural, longDate, addDays, doneDay } from '../util.js';
 import { greetingLine } from '../texts.js';
 import { icon, water, WAVE_PATH, WAVE_PATH_SOFT } from '../ui/icons.js';
 import { chevron } from '../ui/fields.js';
@@ -30,6 +30,8 @@ export function render(s, ui) {
   const nextEvent = events.find((e) => e.time && e.time >= new Date().toTimeString().slice(0, 5));
   // Без «осталось N из M» — цифры уже есть в шаре справа; тут только ближайшее событие
   const summary = nextEvent ? `Дальше — «${esc(nextEvent.title)}» в ${esc(nextEvent.time)}.` : '';
+  const yDay = addDays(today, -1);
+  const yDone = s.tasks.filter((t) => t.status === 'done' && doneDay(t) === yDay).length;
   const streak = diaryStreak();
   const wroteToday = !!(s.diary && s.diary[today] && (s.diary[today].text || s.diary[today].mood || (s.diary[today].answers || []).length));
 
@@ -71,7 +73,7 @@ export function render(s, ui) {
       <div class="hero-text">
         ${summary ? `<div style="font-size:18px;line-height:1.5;max-width:560px">${summary}</div>` : ''}
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn white" data-action="add-task">${icon('plus', 18, 2.2)}Задача</button>
+          <button class="btn white" data-action="quick-add">${icon('plus', 18, 2.2)}Задача</button>
           <button class="btn glass" data-action="add-event">${icon('calendar', 18)}Событие</button>
           <a class="btn glass" href="#diary">${icon('diary', 18)}Дневник</a>
         </div>
@@ -124,6 +126,7 @@ export function render(s, ui) {
           ${quickAddForm(ui, p.id || 'none', today)}
         </div>`;
       }).join('')}</div>` : `<div class="empty">${total ? 'В этом фильтре на сегодня пусто' : 'На сегодня чисто. Нажми «Задача», когда что-то всплывёт.'}</div>`}
+      <div style="display:flex;justify-content:flex-end;border-top:1px solid #F0F4F8;padding-top:10px"><button class="link" style="font-size:13px" data-action="go" data-to="tasks" data-sel="done">${yDone ? `Вчера сделано: ${yDone} — вся история →` : 'История сделанного →'}</button></div>
     </section>
 
     <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:20px">
