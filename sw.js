@@ -1,5 +1,5 @@
 // Офлайн-кеш: приложение открывается даже без интернета.
-const CACHE = 'panel-v9';
+const CACHE = 'panel-v10';
 const FILES = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/store.js', 'js/remote.js', 'js/config.js', 'js/pages/auth.js', 'js/pages/diary.js', 'js/photos.js', 'js/texts.js', 'js/ui/fields.js', 'js/util.js', 'js/ui/morph.js', 'js/ui/icons.js', 'js/ui/nav.js', 'js/ui/fish.js', 'js/ui/quick.js', 'js/report.js', 'js/ui/fx.js', 'js/ui/sportModals.js', 'js/sport.js', 'js/pages/sport.js', 'js/pages/billiards.js', 'js/ui/modals.js', 'js/pages/today.js', 'js/pages/tasks.js', 'js/pages/settings.js', 'js/pages/shared.js', 'manifest.webmanifest', 'icons/icon-64.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))))); self.clients.claim(); });

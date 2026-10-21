@@ -488,3 +488,7 @@ a { color: var(--accent); }
 .iconbtn.cfg { color: #9AAAB5; }
 .iconbtn.cfg:hover { color: var(--accent); background: var(--tint); }
 .iconbtn.cfg.linked { color: #1F8A5B; }
+.ptitle { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; border: 0; background: transparent; font: inherit; font-size: 15px; font-weight: 600; color: var(--ink); text-align: left; cursor: pointer; border-radius: 6px; }
+.ptitle.inline { flex: 0 1 auto; }
+.ptitle:hover { color: var(--accent); text-decoration: underline; text-decoration-color: rgba(46,143,214,.4); text-underline-offset: 3px; }
+.plink { display: inline-flex; color: #1F8A5B; }
