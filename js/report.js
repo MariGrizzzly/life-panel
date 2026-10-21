@@ -16,7 +16,7 @@ export function reportParts(s, day) {
   const work = s.tasks.filter((t) => projectOf(t).sphere === 'work');
   const done = work.filter((t) => t.status === 'done' && doneDay(t) === day);
   const doing = work.filter((t) => t.status === 'doing');
-  const next = work.filter((t) => t.status !== 'done' && t.status !== 'doing' && t.date && t.date > day && t.date <= nextWorkday(day));
+  const next = work.filter((t) => t.status !== 'done' && t.status !== 'doing' && !(t.repeat && t.repeat.length) && t.date && t.date > day && t.date <= nextWorkday(day));
   return { done, doing, next };
 }
 
