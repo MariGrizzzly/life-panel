@@ -25,7 +25,7 @@ export const EVENT_CATS = {
 export const PROJECT_COLORS = ['#5A60C4', '#2F8F83', '#B0802A', '#D9733A', '#C24D6B', '#7A5CB8', '#14629E', '#4B8B3B'];
 export const DEFAULT_TAGS = ['важно', 'созвон', 'ждёт ответа', 'рутина', 'быстро'];
 
-const emptyState = () => ({ version: 3, profile: { name: '', prefs: {} }, projects: [], tags: [], tasks: [], inbox: [], habits: [], habitLog: {}, events: [], diary: {}, workouts: [], billiards: [], hasDemo: false, lastBackup: null, updatedAt: null });
+const emptyState = () => ({ version: 3, profile: { name: '', prefs: {} }, projects: [], tags: [], tasks: [], inbox: [], habits: [], habitLog: {}, events: [], diary: {}, workouts: [], billiards: [], reports: {}, hasDemo: false, lastBackup: null, updatedAt: null });
 
 function normalize(s) {
   const e = emptyState();
@@ -33,6 +33,7 @@ function normalize(s) {
   ['projects', 'tags', 'tasks', 'inbox', 'habits', 'events', 'workouts', 'billiards'].forEach((k) => { if (!Array.isArray(out[k])) out[k] = []; });
   if (!out.habitLog || typeof out.habitLog !== 'object') out.habitLog = {};
   if (!out.diary || typeof out.diary !== 'object' || Array.isArray(out.diary)) out.diary = {};
+  if (!out.reports || typeof out.reports !== 'object' || Array.isArray(out.reports)) out.reports = {};
   if (!out.profile) out.profile = { name: '' };
   if (!out.profile.prefs) out.profile.prefs = {};
   return out;
@@ -74,9 +75,12 @@ const R = {
     // Колонки повтора отправляем, только если они используются (чтобы до SQL-шага ничего не ломалось)
     if (t.repeat !== undefined) row.repeat = t.repeat && t.repeat.length ? t.repeat : null;
     if (t.seriesId) row.series_id = t.seriesId;
+    if (t.bitrixUrl !== undefined) row.bitrix_url = t.bitrixUrl || null;
+    if (t.comment !== undefined) row.comment = t.comment || null;
     return row;
   },
-  project: (p) => ({ id: p.id, user_id: userId, name: p.name, sphere: p.sphere, color: p.color, archived: !!p.archived }),
+  project: (p) => { const row = { id: p.id, user_id: userId, name: p.name, sphere: p.sphere, color: p.color, archived: !!p.archived }; if (p.bitrixUrl !== undefined) row.bitrix_url = p.bitrixUrl || null; return row; },
+  report: (r) => ({ user_id: userId, day: r.day, status: r.status, reported_at: r.reportedAt || null, updated_at: new Date().toISOString() }),
   habit: (h) => ({ id: h.id, user_id: userId, name: h.name, archived: !!h.archived }),
   event: (e) => ({ id: e.id, user_id: userId, title: e.title, date: e.date, time: e.time || '', cat: e.cat || 'personal' }),
   inbox: (i) => ({ id: i.id, user_id: userId, text: i.text, created_at: i.createdAt || new Date().toISOString() }),
@@ -97,10 +101,11 @@ function fromRemote(r) {
   (r.diary || []).forEach((d) => { s.diary[d.day] = { id: d.id, day: d.day, text: d.text || '', mood: d.mood, sleep: d.sleep, energy: d.energy, answers: d.answers || [], photo: d.photo }; });
   s.workouts = (r.workouts || []).map((w) => ({ id: w.id, day: w.day, duration: w.duration, coach: !!w.coach, exercises: w.exercises || [], note: w.note || '' }));
   s.billiards = (r.billiards || []).map((b) => ({ id: b.id, day: b.day, drills: b.drills || [], note: b.note || '' }));
-  s.projects = r.projects.map((p) => ({ id: p.id, name: p.name, sphere: p.sphere, color: p.color, archived: p.archived }));
+  s.projects = r.projects.map((p) => ({ id: p.id, name: p.name, sphere: p.sphere, color: p.color, archived: p.archived, bitrixUrl: p.bitrix_url === undefined ? undefined : (p.bitrix_url || '') }));
+  (r.daily_reports || []).forEach((x) => { s.reports[x.day] = { day: x.day, status: x.status, reportedAt: x.reported_at }; });
   s.tags = r.tags.map((t) => t.name);
   const local = new Map(state.tasks.map((t) => [t.id, t]));
-  s.tasks = r.tasks.map((t) => ({ id: t.id, title: t.title, projectId: t.project_id, date: t.date, time: t.time || '', deadline: t.deadline || '', tags: t.tags || [], status: t.status, doneAt: t.done_at, createdAt: t.created_at, repeat: t.repeat === undefined ? undefined : (t.repeat || null), seriesId: t.series_id || null, prevStatus: local.get(t.id) && local.get(t.id).prevStatus }));
+  s.tasks = r.tasks.map((t) => ({ id: t.id, title: t.title, projectId: t.project_id, date: t.date, time: t.time || '', deadline: t.deadline || '', tags: t.tags || [], status: t.status, doneAt: t.done_at, createdAt: t.created_at, repeat: t.repeat === undefined ? undefined : (t.repeat || null), seriesId: t.series_id || null, bitrixUrl: t.bitrix_url === undefined ? undefined : (t.bitrix_url || ''), comment: t.comment === undefined ? undefined : (t.comment || ''), prevStatus: local.get(t.id) && local.get(t.id).prevStatus }));
   s.inbox = r.inbox.map((i) => ({ id: i.id, text: i.text, createdAt: i.created_at })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   s.habits = r.habits.filter((h) => !h.archived).map((h) => ({ id: h.id, name: h.name }));
   r.habit_log.forEach((l) => { (s.habitLog[l.day] || (s.habitLog[l.day] = {}))[l.habit_id] = true; });
@@ -140,9 +145,9 @@ export async function flush() {
   try { return await flushing; } finally { flushing = null; }
 }
 
-const TABLES = ['profiles', 'projects', 'tags', 'tasks', 'inbox', 'habits', 'habit_log', 'events', 'diary', 'workouts', 'billiards'];
+const TABLES = ['profiles', 'projects', 'tags', 'tasks', 'inbox', 'habits', 'habit_log', 'events', 'diary', 'workouts', 'billiards', 'daily_reports'];
 // Таблица дневника появляется после запуска SQL — без неё панель всё равно работает
-const OPTIONAL = new Set(['diary', 'workouts', 'billiards']);
+const OPTIONAL = new Set(['diary', 'workouts', 'billiards', 'daily_reports']);
 export async function pull() {
   if (!userId) return null;
   await flush();
@@ -257,6 +262,8 @@ export function addTask(data) {
   if (repeat) date = nextOccurrence(repeat, date && date > today ? date : today);
   const t = { id: uid(), title: data.title, projectId: data.projectId || null, date, time: data.time || '', deadline: data.deadline || '', tags: data.tags || [], status: 'todo', doneAt: null, createdAt: new Date().toISOString() };
   if (repeat) t.repeat = repeat;
+  if (data.bitrixUrl) t.bitrixUrl = data.bitrixUrl;
+  if (data.comment) t.comment = data.comment;
   const ops = [];
   store.update((s) => { ops.push(...newTagOps(s, t.tags)); s.tasks.push(t); ops.push(up('tasks', R.task(t))); }, ops);
 }
@@ -322,8 +329,18 @@ export function removeInbox(id) { store.update((s) => { s.inbox = s.inbox.filter
 
 export function addProject(data) {
   const p = { id: uid(), name: data.name, sphere: data.sphere, color: data.color, archived: false };
+  if (data.bitrixUrl) p.bitrixUrl = data.bitrixUrl;
   store.update((s) => { s.projects.push(p); }, [up('projects', R.project(p))]);
   return p.id;
+}
+export function updateProject(id, patch) {
+  const ops = [];
+  store.update((s) => { const p = s.projects.find((x) => x.id === id); if (p) { Object.assign(p, patch); ops.push(up('projects', R.project(p))); } }, ops);
+}
+// Отметка «отчиталась по задачам» за день (её же ставит Telegram-бот)
+export function setReported(day, done = true) {
+  const r = { day, status: done ? 'reported' : 'pending', reportedAt: done ? new Date().toISOString() : null };
+  store.update((s) => { s.reports[day] = r; }, [up('daily_reports', R.report(r), 'user_id,day')]);
 }
 export function archiveProject(id) {
   const ops = [];

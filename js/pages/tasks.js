@@ -4,6 +4,8 @@ import { projectOf, NO_PROJECT } from '../store.js';
 import { taskRow, checkbox, dueChip, repeatChip } from './shared.js';
 import { quickAddForm } from './today.js';
 import { addDays } from '../util.js';
+import { reportText, chatGroups, reportDue } from '../report.js';
+export { reportText };
 
 const SMART = { inbox: 'Улов', today: 'Сегодня', upcoming: 'Предстоящие', nodate: 'Без даты', all: 'Все задачи', done: 'Сделано' };
 
@@ -63,7 +65,8 @@ export function render(s, ui) {
         <button class="list-btn" data-action="toggle-list-menu" aria-expanded="${!!ui.listMenu}" aria-haspopup="true"><span class="pdot" style="background:${esc(color)};width:12px;height:12px"></span><span class="disp" style="font-size:18px">${esc(name)}</span><span class="muted" style="font-size:13px">${openCount}</span><span style="display:flex;transform:rotate(${ui.listMenu ? 180 : 0}deg);transition:transform .2s ease">${icon('chevron', 16, 2)}</span></button>
         ${menu}
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${isProject && sel !== 'none' ? `<button class="link projcfg" data-action="edit-project" data-id="${esc(sel)}" title="Название, цвет, ссылка на чат Битрикса">${(s.projects.find((p) => p.id === sel) || {}).bitrixUrl ? '💬 чат привязан · ' : ''}Настроить</button>` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">
         <div class="seg" role="group" aria-label="Вид">${seg}</div>
         <button class="btn" data-action="quick-add" data-project="${isProject && sel !== 'none' ? esc(sel) : ''}">${icon('plus', 18, 2.2)}Задача</button>
       </div>
@@ -129,27 +132,25 @@ function boardView(tasks) {
   }).join('')}</div></div>`;
 }
 
-export function reportText(s, today) {
-  const work = s.tasks.filter((t) => projectOf(t).sphere === 'work');
-  const done = work.filter((t) => t.status === 'done' && doneDay(t) === today);
-  const doing = work.filter((t) => t.status === 'doing');
-  const tomorrow = work.filter((t) => t.status !== 'done' && t.date && t.date > today && t.date <= nextWorkday(today));
-  const byProject = (list) => {
-    const out = [];
-    [...s.projects, NO_PROJECT].forEach((p) => {
-      const items = list.filter((t) => (t.projectId || null) === p.id);
-      if (items.length) out.push(p.name + '\n' + items.map((t) => '— ' + t.title).join('\n'));
-    });
-    return out.join('\n\n');
-  };
-  return `Отчёт за ${dayMonth(today)}\n\nСделано:\n${byProject(done) || '— пока ничего не отмечено'}\n\nВ работе:\n${doing.map((t) => `— ${t.title} (${projectOf(t).name})${t.deadline ? `, до ${shortDate(t.deadline)}` : ''}`).join('\n') || '—'}\n\nПлан на следующий день:\n${tomorrow.map((t) => `— ${t.title} (${projectOf(t).name})`).join('\n') || '—'}`;
-}
 
-function nextWorkday(today) {
-  const [y, m, d] = today.split('-').map(Number);
-  const dt = new Date(y, m - 1, d + 1);
-  while (dt.getDay() === 0 || dt.getDay() === 6) dt.setDate(dt.getDate() + 1);
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+
+// Отчитаться в чатах Битрикса: текст по каждому чату + ссылка + отметка «Отчиталась»
+function chatsBlock(s, day, realToday) {
+  const groups = chatGroups(s, day);
+  const st = reportDue(s, day);
+  const linked = groups.filter((g) => g.url);
+  const mark = st.done
+    ? `<div class="rep-done">✓ Отчиталась${st.reportedAt ? ` в ${new Date(st.reportedAt).toTimeString().slice(0, 5)}` : ''} <button class="link" data-action="report-undo" data-day="${esc(day)}" style="font-size:12px">отменить</button></div>`
+    : `<button class="btn" data-action="report-done" data-day="${esc(day)}">✓ Отчиталась по задачам</button>`;
+  return `<div class="chats" data-key="chats-${esc(day)}">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 class="h2" style="font-size:15px">Отчитаться в чатах Битрикса</h3>${mark}</div>
+    ${groups.length ? groups.map((g, i) => `<div class="chatblock">
+      <div class="chathead"><span class="pdot" style="background:${esc(g.color)};width:9px;height:9px"></span><b>${esc(g.title)}</b>${g.url ? `<a class="btn ghost small" href="${esc(g.url)}" target="_blank" rel="noopener">Открыть чат ↗</a>` : '<span class="muted" style="font-size:12px">нет ссылки на чат — добавь в проекте</span>'}</div>
+      <pre class="chattext" id="ct-${i}">${esc(g.text)}</pre>
+      <button class="link" data-action="copy-chat" data-target="ct-${i}" style="font-size:13px">Скопировать текст</button>
+    </div>`).join('') : '<div class="muted" style="font-size:14px">За этот день по рабочим задачам пока нечего отправлять.</div>'}
+    ${groups.length && !linked.length ? '<div class="muted" style="font-size:12px">Ссылки на чаты задаются в настройках проекта (Задачи → проект → «Настроить») или у отдельной задачи.</div>' : ''}
+  </div>`;
 }
 
 function reportView(s, day, realToday) {
@@ -169,6 +170,7 @@ function reportView(s, day, realToday) {
         <button class="btn" data-action="copy-report">Скопировать</button>
         <button class="btn ghost" data-action="mail-report">Открыть письмо</button>
       </div>
+      ${chatsBlock(s, day, realToday)}
     </div>
     <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:10px">
       <div class="tile"><div class="muted" style="font-size:13px">Сделано ${day === realToday ? 'сегодня' : esc(dayLabel(day, realToday).toLowerCase())}</div><div class="tile-v">${doneN}</div></div>

@@ -1,4 +1,4 @@
-import { store, sync, toggleTask, updateTask, addInbox, removeInbox, toggleHabit, exportData, importData, markBackup, archiveProject, addHabit, removeHabit, setName, resetAll, startSession, endSession, pull, flush, legacyData, forgetLegacy, setupFresh, setPrefs, saveDiary, currentUserId, addTask } from './store.js';
+import { store, sync, toggleTask, updateTask, addInbox, removeInbox, toggleHabit, exportData, importData, markBackup, archiveProject, addHabit, removeHabit, setName, resetAll, startSession, endSession, pull, flush, legacyData, forgetLegacy, setupFresh, setPrefs, saveDiary, currentUserId, addTask, setReported } from './store.js';
 import * as Diary from './pages/diary.js';
 import { uploadPhoto, removePhoto, onPhotoLoaded } from './photos.js';
 import { resetGreeting } from './texts.js';
@@ -181,6 +181,10 @@ const actions = {
   },
   'copy-backup': async () => { try { await navigator.clipboard.writeText(exportData()); markBackup(); toast('Бэкап скопирован — вставь его в заметку или файл'); } catch (e) { toast('Не получилось скопировать'); } },
   'export': () => { download(`panel-backup-${todayISO()}.json`, exportData()); markBackup(); toast('Бэкап сохранён в Загрузки'); },
+  'edit-project': (el) => { ui.listMenu = false; projectModal(null, el.dataset.id); },
+  'report-done': (el) => { setReported(el.dataset.day || todayISO(), true); toast('Отлично, отчиталась! 🌊'); },
+  'report-undo': (el) => setReported(el.dataset.day || todayISO(), false),
+  'copy-chat': async (el) => { const t = document.getElementById(el.dataset.target); try { await navigator.clipboard.writeText(t.textContent); toast('Текст скопирован — вставь в чат'); } catch (e) { toast('Не получилось скопировать'); } },
   'archive-project': async (el) => { if (await ask('Убрать проект в архив? Задачи останутся.', { ok: 'В архив' })) archiveProject(el.dataset.id); },
   'remove-habit': async (el) => { if (await ask('Убрать привычку?', { ok: 'Убрать' })) removeHabit(el.dataset.id); },
   'reset-all': async () => { if (await ask('Точно удалить всё? Сначала лучше скачать бэкап.', { ok: 'Удалить всё', danger: true })) { resetAll(); toast('Начинаем с чистого листа'); } }

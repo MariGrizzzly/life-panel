@@ -1,7 +1,7 @@
 import { esc, todayISO } from '../util.js';
 import { tagInput, timeField, dateField, selectField } from './fields.js';
 import { icon } from './icons.js';
-import { store, addTask, updateTask, deleteTask, addProject, addEvent, PROJECT_COLORS, EVENT_CATS, removeInbox } from '../store.js';
+import { store, addTask, updateTask, deleteTask, addProject, updateProject, addEvent, PROJECT_COLORS, EVENT_CATS, removeInbox } from '../store.js';
 
 const root = () => document.getElementById('modal-root');
 let lastFocus = null;
@@ -89,6 +89,12 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
       ${t ? '<div class="field"><label class="label" for="f-status">Статус</label><div data-status></div></div>' : ''}
     </div>
     <div class="field"><span class="label" id="rep-lbl">Повтор</span><div class="repeat" data-repeat role="group" aria-labelledby="rep-lbl"></div></div>
+    <details class="forreport"${t && (t.bitrixUrl || t.comment) ? ' open' : ''}><summary>Для отчёта: чат в Битриксе и комментарий</summary>
+      <div class="form-grid" style="margin-top:10px">
+        <div class="field"><label class="label" for="f-bx">Свой чат задачи</label><input id="f-bx" class="input" type="url" inputmode="url" autocomplete="off" value="${esc(t && t.bitrixUrl ? t.bitrixUrl : '')}" data-bx placeholder=""></div>
+        <div class="field"><label class="label" for="f-cm">Комментарий к статусу</label><input id="f-cm" class="input" autocomplete="off" value="${esc(t && t.comment ? t.comment : '')}" placeholder="Например: жду правки от клиента"></div>
+      </div>
+    </details>
     <div class="field"><span class="label" id="tags-lbl">Теги</span><div data-tags aria-labelledby="tags-lbl"></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn" type="submit">${t ? 'Сохранить' : 'Добавить задачу'}</button>
@@ -108,6 +114,10 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
     const stHost = m.querySelector('[data-status]');
     const stF = stHost ? selectField(stHost, { value: data.status, id: 'f-status', name: 'status', groups: () => STATUS_GROUPS }) : null;
     cleanup = () => { [tagsF, dateF, dlF, projF, stF].forEach((f) => f && f.destroy()); };
+    // Подсказка в поле «свой чат»: какой чат у проекта
+    const bxIn = m.querySelector('[data-bx]');
+    const bxPh = () => { const pr = store.get().projects.find((x) => x.id === projF.get()); bxIn.placeholder = pr && pr.bitrixUrl ? `пусто — пойдёт в чат проекта «${pr.name}»` : 'https://… (у проекта чата нет)'; };
+    bxPh(); projHost.addEventListener('pick', bxPh);
     // Повтор: дни недели кнопками + быстрые варианты
     let rep = Array.isArray(data.repeat) ? [...data.repeat] : [];
     const repHost = m.querySelector('[data-repeat]');
@@ -134,6 +144,10 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
       let pid = projF.get();
       const payload = { title: titleV, projectId: pid || null, date: dateF.get() || null, deadline: dlF.get() || '', tags: tagsF.get() };
       if (rep.length || (t && t.repeat && t.repeat.length)) payload.repeat = rep;
+      const bx = m.querySelector('#f-bx').value.trim(); const cm = m.querySelector('#f-cm').value.trim();
+      if (bx && !/^https?:\/\/\S+$/i.test(bx)) { const i = m.querySelector('#f-bx'); m.querySelector('.forreport').open = true; i.setCustomValidity('Нужна ссылка, начинающаяся с https://'); i.reportValidity(); i.addEventListener('input', () => i.setCustomValidity(''), { once: true }); return; }
+      if (bx || (t && t.bitrixUrl !== undefined)) payload.bitrixUrl = bx;
+      if (cm || (t && t.comment !== undefined)) payload.comment = cm;
       if (t) updateTask(t.id, { ...payload, status: stF ? stF.get() : t.status });
       else { addTask(payload); if (fromInbox) removeInbox(fromInbox); }
       closeModal();
@@ -143,17 +157,21 @@ export function taskModal({ id = null, projectId, title = '', date, fromInbox = 
   });
 }
 
-// ===== Проект =====
-export function projectModal(onCreated) {
-  let color = PROJECT_COLORS.find((c) => !store.get().projects.map((p) => p.color).includes(c)) || PROJECT_COLORS[0];
+// ===== Проект: создание и настройка =====
+const isUrl = (v) => /^https?:\/\/\S+$/i.test(v);
+export function projectModal(onCreated, id = null) {
+  const p0 = id ? store.get().projects.find((x) => x.id === id) : null;
+  let color = p0 ? p0.color : (PROJECT_COLORS.find((c) => !store.get().projects.map((p) => p.color).includes(c)) || PROJECT_COLORS[0]);
+  let sphere = p0 ? p0.sphere : 'work';
   const body = `<form data-form style="display:flex;flex-direction:column;gap:14px">
-    <div class="field"><label class="label" for="p-name">Название</label><input id="p-name" name="name" class="input" required autocomplete="off"></div>
-    <div class="field"><span class="label">Сфера</span><div class="seg" role="radiogroup"><button type="button" class="on" data-sphere="work" role="radio" aria-checked="true">Работа</button><button type="button" data-sphere="personal" role="radio" aria-checked="false">Личное</button></div></div>
+    <div class="field"><label class="label" for="p-name">Название</label><input id="p-name" name="name" class="input" required autocomplete="off" value="${esc(p0 ? p0.name : '')}"></div>
+    <div class="field"><span class="label">Сфера</span><div class="seg" role="radiogroup">${[['work', 'Работа'], ['personal', 'Личное']].map(([k, l]) => `<button type="button" class="${sphere === k ? 'on' : ''}" data-sphere="${k}" role="radio" aria-checked="${sphere === k}">${l}</button>`).join('')}</div></div>
     <div class="field"><span class="label">Цвет</span><div class="swatches">${PROJECT_COLORS.map((c) => `<button type="button" class="swatch${c === color ? ' on' : ''}" data-color="${c}" style="background:${c}" aria-label="Цвет ${c}"></button>`).join('')}</div></div>
-    <div style="display:flex;gap:8px"><button class="btn" type="submit">Создать проект</button><button class="btn ghost" type="button" data-close>Отмена</button></div>
+    <div class="field"><label class="label" for="p-bx">Чат в Битриксе</label><input id="p-bx" name="bx" class="input" type="url" inputmode="url" autocomplete="off" placeholder="https://… — сюда бот и отчёт отправят задачи проекта" value="${esc(p0 && p0.bitrixUrl ? p0.bitrixUrl : '')}">
+      <span class="muted" style="font-size:12px">Все задачи проекта отчитываются в этот чат. Если у задачи свой чат — ссылку можно задать в самой задаче.</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="submit">${p0 ? 'Сохранить' : 'Создать проект'}</button><button class="btn ghost" type="button" data-close>Отмена</button></div>
   </form>`;
-  open('Новый проект', body, (m) => {
-    let sphere = 'work';
+  open(p0 ? 'Настройки проекта' : 'Новый проект', body, (m) => {
     m.querySelectorAll('[data-sphere]').forEach((b) => b.addEventListener('click', () => {
       sphere = b.dataset.sphere;
       m.querySelectorAll('[data-sphere]').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', String(x === b)); });
@@ -163,11 +181,14 @@ export function projectModal(onCreated) {
     }));
     m.querySelector('[data-form]').addEventListener('submit', (e) => {
       e.preventDefault();
-      const name = new FormData(e.target).get('name').trim();
-      if (!name) return;
-      const id = addProject({ name, sphere, color });
+      const fd = new FormData(e.target);
+      const name = String(fd.get('name') || '').trim(); if (!name) return;
+      const bx = String(fd.get('bx') || '').trim();
+      if (bx && !isUrl(bx)) { const i = m.querySelector('#p-bx'); i.setCustomValidity('Нужна ссылка, начинающаяся с https://'); i.reportValidity(); i.addEventListener('input', () => i.setCustomValidity(''), { once: true }); return; }
+      if (p0) { updateProject(p0.id, { name, sphere, color, ...(bx || p0.bitrixUrl !== undefined ? { bitrixUrl: bx } : {}) }); closeModal(); return; }
+      const nid = addProject({ name, sphere, color, bitrixUrl: bx || undefined });
       closeModal();
-      if (onCreated) onCreated(id);
+      if (onCreated) onCreated(nid);
     });
   });
 }

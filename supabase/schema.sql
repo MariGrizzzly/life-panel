@@ -171,3 +171,31 @@ insert into workouts (user_id, day, exercises)
 select u.id, date '2026-10-10', '[{"name": "Жим ногами", "sets": [{"w": 20, "r": null, "d": []}], "note": "М: 20 кг + ~35 кг", "delta": null}, {"name": "Ягодичный мостик", "sets": [{"w": 5, "r": null, "d": []}, {"w": 15, "r": null, "d": []}, {"w": 15, "r": null, "d": []}], "note": "", "delta": null}, {"name": "Тяга румынская с гантелями", "sets": [{"w": 10, "r": null, "d": []}, {"w": 10, "r": null, "d": []}, {"w": 10, "r": null, "d": []}], "note": "", "delta": null}, {"name": "Разведение ног", "sets": [{"w": 40, "r": 15, "d": [{"w": 35, "r": 10}, {"w": 30, "r": null}]}], "note": "градациями: 40/35/30", "delta": null}, {"name": "Отжимания", "sets": [{"w": null, "r": "10-15", "d": []}, {"w": null, "r": "10-15", "d": []}, {"w": null, "r": "10-15", "d": []}], "note": "", "delta": null}, {"name": "Подъём на икры", "sets": [{"w": null, "r": 25, "d": []}, {"w": null, "r": 25, "d": []}, {"w": null, "r": 25, "d": []}, {"w": 10, "r": null, "d": []}], "note": "", "delta": null}]'::jsonb
 from (select user_id as id from profiles order by user_id limit 1) u
 where not exists (select 1 from workouts w where w.user_id = u.id and w.day = date '2026-10-10');
+-- ===== Шаг 5: отчётность — ссылки на чаты Битрикса, комментарии, отметка «отчиталась» =====
+alter table projects add column if not exists bitrix_url text;
+alter table tasks add column if not exists bitrix_url text;
+alter table tasks add column if not exists comment text;
+alter table tasks add column if not exists repeat jsonb;
+alter table tasks add column if not exists series_id uuid;
+
+create table if not exists daily_reports (
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  day date not null,
+  status text not null default 'pending',
+  reported_at timestamptz,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, day)
+);
+alter table daily_reports enable row level security;
+drop policy if exists own_rows on daily_reports;
+create policy own_rows on daily_reports for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Память Telegram-бота (какая задача сейчас на экране, ждёт ли он комментарий).
+-- Политик нет специально: читать и писать её может только сам бот на сервере.
+create table if not exists bot_state (
+  user_id uuid primary key references auth.users on delete cascade,
+  chat_id bigint,
+  state jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table bot_state enable row level security;

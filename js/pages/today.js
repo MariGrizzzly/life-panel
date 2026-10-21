@@ -1,4 +1,5 @@
 import { esc, todayISO, plural, longDate, addDays, doneDay } from '../util.js';
+import { reportDue } from '../report.js';
 import { greetingLine } from '../texts.js';
 import { icon, water, WAVE_PATH, WAVE_PATH_SOFT } from '../ui/icons.js';
 import { chevron } from '../ui/fields.js';
@@ -32,6 +33,7 @@ export function render(s, ui) {
   const summary = nextEvent ? `Дальше — «${esc(nextEvent.title)}» в ${esc(nextEvent.time)}.` : '';
   const yDay = addDays(today, -1);
   const yDone = s.tasks.filter((t) => t.status === 'done' && doneDay(t) === yDay).length;
+  const rep = reportDue(s, today);
   const streak = diaryStreak();
   const wroteToday = !!(s.diary && s.diary[today] && (s.diary[today].text || s.diary[today].mood || (s.diary[today].answers || []).length));
 
@@ -137,7 +139,7 @@ export function render(s, ui) {
       <section class="dayclose">
         <div aria-hidden="true" data-skip-morph><span class="bub" style="width:7px;height:7px;left:85%;bottom:10px;animation-delay:.5s"></span><span class="bub" style="width:5px;height:5px;left:92%;bottom:6px;animation-delay:2.5s"></span></div>
         <div style="position:relative;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h2 class="h2" style="color:#FFFFFF">Закрыть день</h2></div>
-        <button data-action="go" data-to="tasks" data-view="report"><span style="flex:1"><span style="font-size:14px;font-weight:600">Отчёт по работе</span><small>${wDoneN} ${plural(wDoneN, ['задача готова', 'задачи готовы', 'задач готово'])}, ${wDoingN} в работе</small></span><span aria-hidden="true">→</span></button>
+        <button data-action="go" data-to="tasks" data-view="report" class="${rep.due ? 'due' : rep.done ? 'okd' : ''}"><span style="flex:1"><span style="font-size:14px;font-weight:600">${rep.done ? '✓ Отчиталась по задачам' : rep.due ? 'Пора отчитаться по задачам' : 'Отчёт по работе'}</span><small>${rep.done ? (rep.reportedAt ? `в ${new Date(rep.reportedAt).toTimeString().slice(0, 5)} · ` : '') + `${wDoneN} ${plural(wDoneN, ['задача готова', 'задачи готовы', 'задач готово'])}` : rep.due ? 'статусы → отчёт → чаты Битрикса' : `${wDoneN} ${plural(wDoneN, ['задача готова', 'задачи готовы', 'задач готово'])}, ${wDoingN} в работе${rep.before ? ' · бот напомнит в 17:10' : ''}`}</small></span><span aria-hidden="true">→</span></button>
         <button data-action="go" data-to="diary"><span style="flex:1"><span style="font-size:14px;font-weight:600">${wroteToday ? 'Дневник: запись есть' : 'Пара строк в дневник'}</span><small>${streak ? `${streak} ${plural(streak, ['день', 'дня', 'дней'])} подряд${wroteToday ? '' : ' — не прерывай серию'}` : 'настроение, мысли и фото дня'}</small></span><span aria-hidden="true">→</span></button>
       </section>
     </div>
