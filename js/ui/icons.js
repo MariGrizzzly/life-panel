@@ -17,6 +17,7 @@ export const ICONS = {
   close: 'M6 6l12 12M18 6L6 18',
   menu: 'M4 6h16M4 12h16M4 18h16',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
+  chat: 'M4 5h16v11H10l-5 4v-4H4zM8 9.5h8M8 12.5h5',
   spark: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z'
 };
 

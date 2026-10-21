@@ -485,3 +485,6 @@ a { color: var(--accent); }
 .chattext { margin: 0; white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.55; background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
 .chatblock .link { align-self: flex-start; }
 .rep-done { color: #1F8A5B; font-weight: 600; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.iconbtn.cfg { color: #9AAAB5; }
+.iconbtn.cfg:hover { color: var(--accent); background: var(--tint); }
+.iconbtn.cfg.linked { color: #1F8A5B; }

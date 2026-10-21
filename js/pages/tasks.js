@@ -65,7 +65,7 @@ export function render(s, ui) {
         <button class="list-btn" data-action="toggle-list-menu" aria-expanded="${!!ui.listMenu}" aria-haspopup="true"><span class="pdot" style="background:${esc(color)};width:12px;height:12px"></span><span class="disp" style="font-size:18px">${esc(name)}</span><span class="muted" style="font-size:13px">${openCount}</span><span style="display:flex;transform:rotate(${ui.listMenu ? 180 : 0}deg);transition:transform .2s ease">${icon('chevron', 16, 2)}</span></button>
         ${menu}
       </div>
-      ${isProject && sel !== 'none' ? `<button class="link projcfg" data-action="edit-project" data-id="${esc(sel)}" title="Название, цвет, ссылка на чат Битрикса">${(s.projects.find((p) => p.id === sel) || {}).bitrixUrl ? '💬 чат привязан · ' : ''}Настроить</button>` : ''}
+      ${isProject && sel !== 'none' ? `<button class="btn ghost small projcfg" data-action="edit-project" data-id="${esc(sel)}" title="Название, цвет, ссылка на чат Битрикса">${icon('chat', 16, 2)}${(s.projects.find((p) => p.id === sel) || {}).bitrixUrl ? 'Чат Битрикса привязан' : 'Привязать чат Битрикса'}</button>` : ''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">
         <div class="seg" role="group" aria-label="Вид">${seg}</div>
         <button class="btn" data-action="quick-add" data-project="${isProject && sel !== 'none' ? esc(sel) : ''}">${icon('plus', 18, 2.2)}Задача</button>
@@ -86,7 +86,7 @@ function listView(s, tasks, isProject, today, ui, sel) {
   }
   return `<div style="display:flex;flex-direction:column;gap:18px">${groups.map((g) => `
     <div data-key="g-${esc(g.key)}">
-      <div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;padding:4px 0 6px;color:${g.key === 'overdue' ? '#A23B2A' : 'inherit'}"><span class="pdot" style="background:${esc(g.color)}"></span>${esc(g.name)}<span class="muted" style="font-weight:500;font-size:13px">${g.items.length}</span>${isProject ? '' : `<button class="iconbtn" data-action="quick-open" data-project="${esc(g.key)}" aria-label="Добавить задачу в «${esc(g.name)}»" title="Добавить задачу">${icon('plus', 18, 2.2)}</button>`}</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;padding:4px 0 6px;color:${g.key === 'overdue' ? '#A23B2A' : 'inherit'}"><span class="pdot" style="background:${esc(g.color)}"></span>${esc(g.name)}<span class="muted" style="font-weight:500;font-size:13px">${g.items.length}</span>${isProject || g.key === 'none' ? '' : `<button class="iconbtn cfg${(s.projects.find((p) => p.id === g.key) || {}).bitrixUrl ? ' linked' : ''}" data-action="edit-project" data-id="${esc(g.key)}" aria-label="Настройки проекта «${esc(g.name)}»" title="Настройки проекта и чат Битрикса">${icon('chat', 18, 1.9)}</button>`}${isProject ? '' : `<button class="iconbtn" data-action="quick-open" data-project="${esc(g.key)}" aria-label="Добавить задачу в «${esc(g.name)}»" title="Добавить задачу">${icon('plus', 18, 2.2)}</button>`}</div>
       ${g.items.sort(sortTasks).map((t) => {
         const w = whenOf(t, today);
         const meta = [isProject ? '' : (w === 'today' ? '' : (t.date ? (w === 'overdue' ? 'просрочено · ' : '') + shortDate(t.date) : '')), t.time].filter(Boolean).join(' · ');
