@@ -1,7 +1,7 @@
 import { esc, todayISO } from '../util.js';
 import { tagInput, timeField, dateField, selectField } from './fields.js';
 import { icon } from './icons.js';
-import { store, addTask, updateTask, deleteTask, addProject, updateProject, addEvent, PROJECT_COLORS, EVENT_CATS, removeInbox } from '../store.js';
+import { store, addTask, updateTask, deleteTask, addProject, updateProject, addEvent, updateEvent, deleteEvent, PROJECT_COLORS, EVENT_CATS, removeInbox } from '../store.js';
 
 const root = () => document.getElementById('modal-root');
 let lastFocus = null;
@@ -194,28 +194,42 @@ export function projectModal(onCreated, id = null) {
 }
 
 // ===== Событие =====
-export function eventModal() {
+export const CAT_COLORS = { work: '#5A60C4', personal: '#D9733A', sport: '#2F8F83', blog: '#7A5CB8' };
+export function eventModal({ id = null, date = null, time = '' } = {}) {
+  const e0 = id ? store.get().events.find((x) => x.id === id) : null;
   const body = `<form data-form style="display:flex;flex-direction:column;gap:14px">
-    <div class="field"><label class="label" for="e-title">Что</label><input id="e-title" name="title" class="input" required autocomplete="off"></div>
+    <div class="field"><label class="label" for="e-title">Что</label><input id="e-title" name="title" class="input" required autocomplete="off" value="${esc(e0 ? e0.title : '')}"></div>
     <div class="form-grid">
       <div class="field"><label class="label" for="e-date">Дата</label><div data-date></div></div>
       <div class="field"><label class="label" for="e-time">Время</label><div data-time></div></div>
       <div class="field"><label class="label" for="e-cat">Категория</label><div data-cat></div></div>
     </div>
-    <div style="display:flex;gap:8px"><button class="btn" type="submit">Добавить событие</button><button class="btn ghost" type="button" data-close>Отмена</button></div>
+    <div class="dayevents" data-dayev></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="submit">${e0 ? 'Сохранить' : 'Добавить событие'}</button><button class="btn ghost" type="button" data-close>Отмена</button>${e0 ? '<button class="btn danger" type="button" data-delete style="margin-left:auto">Удалить</button>' : ''}</div>
   </form>`;
-  open('Новое событие', body, (m) => {
-    const timeF = timeField(m.querySelector('[data-time]'), { value: '', id: 'e-time', name: 'time' });
-    const dateF = dateField(m.querySelector('[data-date]'), { value: todayISO(), id: 'e-date', name: 'date', required: true });
-    const catColors = { work: '#5A60C4', personal: '#D9733A', sport: '#2F8F83', blog: '#7A5CB8' };
-    const catF = selectField(m.querySelector('[data-cat]'), { value: 'personal', id: 'e-cat', name: 'cat', groups: () => [{ options: Object.entries(EVENT_CATS).map(([k, v]) => ({ value: k, label: v.label, color: catColors[k] })) }] });
+  open(e0 ? 'Событие' : 'Новое событие', body, (m) => {
+    const timeF = timeField(m.querySelector('[data-time]'), { value: e0 ? e0.time : time, id: 'e-time', name: 'time' });
+    const dateF = dateField(m.querySelector('[data-date]'), { value: e0 ? e0.date : (date || todayISO()), id: 'e-date', name: 'date', required: true });
+    const catF = selectField(m.querySelector('[data-cat]'), { value: e0 ? e0.cat : 'personal', id: 'e-cat', name: 'cat', groups: () => [{ options: Object.entries(EVENT_CATS).map(([k, v]) => ({ value: k, label: v.label, color: CAT_COLORS[k] })) }] });
     cleanup = () => { timeF.destroy(); dateF.destroy(); catF.destroy(); };
+    // Что уже стоит в выбранный день — чтобы не наложить встречи
+    const dayEv = m.querySelector('[data-dayev]');
+    const drawDay = () => {
+      const d = dateF.get() || todayISO();
+      const list = store.get().events.filter((x) => x.date === d && x.id !== id).sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+      dayEv.innerHTML = list.length ? `<div class="label" style="margin-bottom:6px">В этот день уже есть</div>${list.map((x) => `<div class="dayev"><b>${esc(x.time || 'весь день')}</b><span class="pdot" style="background:${CAT_COLORS[x.cat] || '#9AAAB5'};width:8px;height:8px"></span>${esc(x.title)}</div>`).join('')}` : '<div class="muted" style="font-size:13px">В этот день больше ничего нет</div>';
+    };
+    drawDay();
+    m.querySelector('[data-date]').addEventListener('pick', drawDay);
     m.querySelector('[data-form]').addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const title = String(fd.get('title') || '').trim(); if (!title) return;
-      addEvent({ title, date: dateF.get() || todayISO(), time: timeF.get(), cat: catF.get() });
+      const data = { title, date: dateF.get() || todayISO(), time: timeF.get(), cat: catF.get() };
+      if (e0) updateEvent(e0.id, data); else addEvent(data);
       closeModal();
     });
+    const del = m.querySelector('[data-delete]');
+    if (del) del.addEventListener('click', async () => { if (await ask('Удалить событие?', { ok: 'Удалить', danger: true })) { deleteEvent(e0.id); closeModal(); } });
   });
 }

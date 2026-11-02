@@ -34,6 +34,7 @@ export function render(s, ui) {
   const yDay = addDays(today, -1);
   const yDone = s.tasks.filter((t) => t.status === 'done' && doneDay(t) === yDay).length;
   const rep = reportDue(s, today);
+  const tomorrowEv = s.events.filter((e) => e.date === addDays(today, 1)).sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
   const streak = diaryStreak();
   const wroteToday = !!(s.diary && s.diary[today] && (s.diary[today].text || s.diary[today].mood || (s.diary[today].answers || []).length));
 
@@ -133,8 +134,9 @@ export function render(s, ui) {
 
     <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:20px">
       <section class="card" style="display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center"><h2 class="h2">Сегодня в календаре</h2><button class="link" data-action="add-event">+ Событие</button></div>
-        ${events.length ? events.map((e) => { const c = EVENT_CATS[e.cat] || EVENT_CATS.personal; return `<div class="event" data-key="ev-${esc(e.id)}"><div class="t">${esc(e.time || '—')}</div><div class="b" style="background:${c.bg}"><div style="font-size:14px;font-weight:500">${esc(e.title)}</div><div style="font-size:12px;font-weight:600;color:${c.fg}">${c.label}</div></div></div>`; }).join('') : '<div class="muted" style="font-size:14px">Событий нет</div>'}
+        <div style="display:flex;justify-content:space-between;align-items:center"><a class="h2" href="#calendar" style="color:inherit;text-decoration:none">Сегодня в календаре →</a><button class="link" data-action="add-event">+ Событие</button></div>
+        ${events.length ? events.map((e) => { const c = EVENT_CATS[e.cat] || EVENT_CATS.personal; return `<button class="event" data-action="event-edit" data-id="${esc(e.id)}" data-key="ev-${esc(e.id)}"><div class="t">${esc(e.time || '—')}</div><div class="b" style="background:${c.bg}"><div style="font-size:14px;font-weight:500">${esc(e.title)}</div><div style="font-size:12px;font-weight:600;color:${c.fg}">${c.label}</div></div></button>`; }).join('') : '<div class="muted" style="font-size:14px">Событий нет</div>'}
+        ${tomorrowEv.length ? `<div class="tmrw"><span class="label">Завтра</span>${tomorrowEv.map((e) => `<button class="link" data-action="event-edit" data-id="${esc(e.id)}"><b>${esc(e.time || 'весь день')}</b> ${esc(e.title)}</button>`).join('')}</div>` : ''}
       </section>
       <section class="dayclose">
         <div aria-hidden="true" data-skip-morph><span class="bub" style="width:7px;height:7px;left:85%;bottom:10px;animation-delay:.5s"></span><span class="bub" style="width:5px;height:5px;left:92%;bottom:6px;animation-delay:2.5s"></span></div>

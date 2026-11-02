@@ -17,10 +17,11 @@ import * as Settings from './pages/settings.js';
 import { syncText } from './pages/settings.js';
 import { soonPage } from './pages/shared.js';
 import * as Sport from './pages/sport.js';
+import * as Calendar from './pages/calendar.js';
 import * as Billiards from './pages/billiards.js';
 import { workoutModal, billiardModal } from './ui/sportModals.js';
 
-const PAGES = { today: Today, tasks: Tasks, settings: Settings, diary: Diary, sport: Sport, billiards: Billiards };
+const PAGES = { today: Today, tasks: Tasks, settings: Settings, diary: Diary, sport: Sport, billiards: Billiards, calendar: Calendar };
 const SOON = {
   calendar: 'Неделя и месяц, события из Apple Календаря, задачи со временем. Добавлять события уже можно — кнопка «Событие» на «Сегодня».',
   diary: 'Запись дня, настроение смайликами, вопросы на выбор, серия дней подряд, фото дня и выгрузка в Apple Дневник.',
@@ -152,7 +153,12 @@ const actions = {
   },
   'photo-month': (el) => { ui.photoMonth = el.dataset.to; render(); },
   'set-status': (el) => updateTask(el.dataset.id, { status: el.dataset.status }),
-  'add-event': () => eventModal(),
+  'add-event': (el) => eventModal(el.dataset.date ? { date: el.dataset.date } : {}),
+  'event-edit': (el) => eventModal({ id: el.dataset.id }),
+  'cal-view': (el) => { ui.calView = el.dataset.id; if (el.dataset.id === 'month') ui.calSel = ui.calSel || ui.calAnchor || todayISO(); render(); },
+  'cal-nav': (el) => { const v = ui.calView || 'week'; const a = ui.calAnchor || todayISO(); const dir = Number(el.dataset.dir); if (v === 'week') ui.calAnchor = addDays(a, 7 * dir); else { const [y, m] = a.split('-').map(Number); const d = new Date(y, m - 1 + dir, 1); ui.calAnchor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; } render(); },
+  'cal-today': () => { ui.calAnchor = todayISO(); ui.calSel = todayISO(); render(); },
+  'cal-day': (el) => { ui.calSel = el.dataset.day; if (el.dataset.view) { ui.calView = el.dataset.view; ui.calAnchor = el.dataset.day; } render(); },
   'more-menu': () => { ui.moreMenu = !ui.moreMenu; render(); },
   'workout-add': () => workoutModal(),
   'workout-edit': (el) => workoutModal({ id: el.dataset.id }),

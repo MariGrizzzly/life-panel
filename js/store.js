@@ -409,6 +409,11 @@ export function habitStreak(habitId, date = todayISO()) {
   return n;
 }
 
+export function updateEvent(id, patch) {
+  const ops = [];
+  store.update((s) => { const e = s.events.find((x) => x.id === id); if (e) { Object.assign(e, patch); ops.push(up('events', R.event(e))); } }, ops);
+}
+export function deleteEvent(id) { store.update((s) => { s.events = s.events.filter((e) => e.id !== id); }, [del('events', { id })]); }
 export function addEvent(data) {
   const e = { id: uid(), title: data.title, date: data.date, time: data.time || '', cat: data.cat || 'personal' };
   store.update((s) => { s.events.push(e); }, [up('events', R.event(e))]);

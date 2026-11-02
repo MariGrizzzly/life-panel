@@ -4,7 +4,7 @@ import { esc } from '../util.js';
 export const SECTIONS = [
   { id: 'today', label: 'Сегодня', group: 'daily' },
   { id: 'tasks', label: 'Задачи', group: 'daily' },
-  { id: 'calendar', label: 'Календарь', group: 'daily', soon: true },
+  { id: 'calendar', label: 'Календарь', group: 'daily' },
   { id: 'diary', label: 'Дневник', group: 'daily' },
   { id: 'goals', label: 'Цели и привычки', group: 'mine', soon: true },
   { id: 'sport', label: 'Спорт', group: 'mine' },
@@ -52,7 +52,7 @@ export function sidebar({ section, name, badges, backupTitle, backupText, backup
 </nav>`;
 }
 
-const MAIN_TABS = ['today', 'tasks', 'diary'];
+const MAIN_TABS = ['today', 'tasks', 'calendar', 'diary'];
 export function tabbar(section, moreOpen = false) {
   const a = (id, label, ic) => `<a href="#${id}" class="${section === id ? 'on' : ''}">${icon(ic, 22)}${label}</a>`;
   const inMore = !MAIN_TABS.includes(section);
@@ -63,7 +63,7 @@ export function tabbar(section, moreOpen = false) {
     ${sheet}
     ${a('today', 'Сегодня', 'today')}${a('tasks', 'Задачи', 'tasks')}
     <button class="plus" data-action="quick-add" aria-label="Новая задача">${icon('plus', 24, 2.2)}</button>
-    ${a('diary', 'Дневник', 'diary')}
+    ${a('calendar', 'Календарь', 'calendar')}${a('diary', 'Дневник', 'diary')}
     <button class="${inMore || moreOpen ? 'on' : ''}" data-action="more-menu" aria-expanded="${moreOpen}" aria-haspopup="menu">${icon('menu', 22)}${inMore ? esc((SECTIONS.find((x) => x.id === section) || {}).label || 'Ещё').split(' ')[0] : 'Ещё'}</button>
   </nav>`;
 }
